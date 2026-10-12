@@ -72,6 +72,40 @@ struct CopyService: Sendable {
             .appendingPathComponent(Self.notesFilename)
     }
 
+    func isKnownFamilyMember(repositoryRoot: URL, relativePath: String) -> Bool {
+        let file = repositoryRoot.appendingPathComponent(relativePath)
+        let notes = notesURL(repositoryRoot: repositoryRoot, relativePath: relativePath)
+        guard let contents = try? String(contentsOf: notes, encoding: .utf8) else { return false }
+        return contents.contains(file.lastPathComponent) && contents.contains("- Event: Copied")
+    }
+
+    /// Adds a required revision note for every selected document already known to belong to a
+    /// family, and returns the original paths plus the human-readable notes files to commit.
+    func documentFamilyChanges(
+        repositoryRoot: URL,
+        paths: [String],
+        checkpointMessage: String,
+        commit: String
+    ) throws -> [String] {
+        var pathsToCommit = Set(paths)
+        for path in paths where URL(fileURLWithPath: path).lastPathComponent != Self.notesFilename {
+            guard isKnownFamilyMember(repositoryRoot: repositoryRoot, relativePath: path) else { continue }
+            let notes = try addFileNote(
+                repositoryRoot: repositoryRoot,
+                relativePath: path,
+                eventType: "Revised",
+                note: checkpointMessage,
+                commit: commit
+            )
+            let relativeNotes = notes.path.replacingOccurrences(
+                of: repositoryRoot.standardizedFileURL.path + "/",
+                with: ""
+            )
+            pathsToCommit.insert(relativeNotes)
+        }
+        return pathsToCommit.sorted()
+    }
+
     @discardableResult
     func addFileNote(
         repositoryRoot: URL,

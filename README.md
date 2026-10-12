@@ -20,6 +20,7 @@ The native macOS prototype includes:
 - Reading and adding human-readable `GittingToIt Notes.md` entries
 - Documented related copies named `filename c YYYYMMDD.ext`
 - Required purpose notes for copies
+- Automatic family-history notes whenever a known original or copy is checkpointed
 - A bold, high-contrast visual system inspired by the supplied mood board
 - Selective checkpoints that cannot include unrelated staged work
 - Safe one-file restoration with an automatic safety checkpoint for current edits

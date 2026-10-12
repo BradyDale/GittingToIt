@@ -28,6 +28,15 @@ struct ReviewCommitSheet: View {
                 Text("Only checked files will be included. Unrelated staged work remains staged.")
                     .foregroundStyle(.secondary)
 
+                if changes.contains(where: { $0.path.range(of: #" c \d{8}"#, options: .regularExpression) != nil }) {
+                    Text("A related copy changed. Your checkpoint message will also be added to its File Notes.")
+                        .fontWeight(.semibold)
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(GTTheme.yellow.opacity(0.75))
+                        .overlay(Rectangle().stroke(GTTheme.ink, lineWidth: 1.5))
+                }
+
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         ForEach(changes) { change in

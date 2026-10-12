@@ -85,6 +85,40 @@ struct CopyServiceTests {
         #expect(notes.contains("Uploaded to Google Docs"))
         #expect(notes.contains("canonical version"))
     }
+
+    @Test func familyChangeAddsRevisionDocumentationToCheckpointPaths() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try "Original".write(to: root.appendingPathComponent("Chapter.md"), atomically: true, encoding: .utf8)
+        let service = CopyService()
+        let copy = try service.makeRelatedCopy(
+            repositoryRoot: root,
+            relativePath: "Chapter.md",
+            purpose: "Try a different narrator.",
+            sourceCommit: "abc1234"
+        )
+        let copyName = copy.copyURL.lastPathComponent
+
+        #expect(service.isKnownFamilyMember(repositoryRoot: root, relativePath: "Chapter.md"))
+        #expect(service.isKnownFamilyMember(repositoryRoot: root, relativePath: copyName))
+
+        let paths = try service.documentFamilyChanges(
+            repositoryRoot: root,
+            paths: [copyName],
+            checkpointMessage: "The new narrator makes the opening clearer.",
+            commit: "def5678"
+        )
+
+        #expect(paths.contains(copyName))
+        #expect(paths.contains(CopyService.notesFilename))
+        let notes = try String(contentsOf: copy.notesURL, encoding: .utf8)
+        #expect(notes.contains("- Event: Copied"))
+        #expect(notes.contains("Revised"))
+        #expect(notes.contains("new narrator makes the opening clearer"))
+    }
 }
 
 struct GitClientCommitTests {

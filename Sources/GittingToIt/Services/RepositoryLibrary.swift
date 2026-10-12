@@ -174,9 +174,20 @@ final class RepositoryLibrary: ObservableObject {
     }
 
     func saveCheckpoint(paths: [String], message: String) async throws -> CommitSummary {
-        guard let repository = selectedRepository else { throw GitClientError.noFilesSelected }
+        guard let repository = selectedRepository,
+              let snapshot = snapshots[repository.id] else { throw GitClientError.noFilesSelected }
         let commit = try await Task.detached {
-            try GitClient().commitSelected(in: repository.folderURL, paths: paths, message: message)
+            let documentedPaths = try CopyService().documentFamilyChanges(
+                repositoryRoot: repository.folderURL,
+                paths: paths,
+                checkpointMessage: message,
+                commit: snapshot.currentCommit
+            )
+            return try GitClient().commitSelected(
+                in: repository.folderURL,
+                paths: documentedPaths,
+                message: message
+            )
         }.value
         refreshSelected()
         return commit
