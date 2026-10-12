@@ -9,6 +9,7 @@ struct RepositoryDashboard: View {
     @State private var selectedCommitID: CommitSummary.ID?
     @State private var commitFiles: [GitChange] = []
     @State private var showingCopySheet = false
+    @State private var showingCommitSheet = false
     @State private var showingFileHistory = false
     @State private var showingNotes = false
 
@@ -40,14 +41,13 @@ struct RepositoryDashboard: View {
             .gtPanel(GTTheme.repositoryColor(for: repository.id))
 
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 9) {
-                Button("Review & Commit") { }
+                Button("Review & Commit") { showingCommitSheet = true }
                     .buttonStyle(GTActionButtonStyle(color: GTTheme.blush))
-                    .disabled(true)
-                    .help("Commit writing is intentionally guarded in this first checkpoint.")
-                Button("Restore") { }
+                    .disabled(snapshot.changes.isEmpty)
+                Button("Restore") { showingFileHistory = true }
                     .buttonStyle(GTActionButtonStyle(color: GTTheme.blush))
-                    .disabled(true)
-                    .help("Select a historical file version before restoration.")
+                    .disabled(selectedDocument == nil)
+                    .help("Choose a historical version of the selected file.")
             }
 
             Text("WRITING DOCUMENTS")
@@ -78,6 +78,10 @@ struct RepositoryDashboard: View {
                 FileHistoryView(document: selectedDocument)
                     .environmentObject(library)
             }
+        }
+        .sheet(isPresented: $showingCommitSheet) {
+            ReviewCommitSheet(changes: snapshot.changes)
+                .environmentObject(library)
         }
         .sheet(isPresented: $showingCopySheet) {
             if let selectedDocument {

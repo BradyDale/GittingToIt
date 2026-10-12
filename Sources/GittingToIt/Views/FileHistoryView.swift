@@ -8,6 +8,8 @@ struct FileHistoryView: View {
     @State private var commits: [CommitSummary] = []
     @State private var isLoading = true
     @State private var errorMessage: String?
+    @State private var selectedCommitID: CommitSummary.ID?
+    @State private var showingRestore = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -18,6 +20,9 @@ struct FileHistoryView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
+                Button("Restore Selected Version") { showingRestore = true }
+                    .buttonStyle(GTActionButtonStyle(color: GTTheme.blush))
+                    .disabled(selectedCommitID == nil)
                 Button("Done") { dismiss() }
                     .buttonStyle(GTActionButtonStyle(color: GTTheme.yellow))
                     .keyboardShortcut(.cancelAction)
@@ -29,7 +34,7 @@ struct FileHistoryView: View {
             } else if let errorMessage {
                 ContentUnavailableView("History unavailable", systemImage: "exclamationmark.triangle", description: Text(errorMessage))
             } else {
-                List(commits) { commit in
+                List(commits, selection: $selectedCommitID) { commit in
                     VStack(alignment: .leading, spacing: 5) {
                         Text(commit.message).fontWeight(.medium)
                         HStack {
@@ -51,6 +56,13 @@ struct FileHistoryView: View {
             do { commits = try await library.history(for: document) }
             catch { errorMessage = error.localizedDescription }
             isLoading = false
+        }
+        .sheet(isPresented: $showingRestore) {
+            if let id = selectedCommitID,
+               let commit = commits.first(where: { $0.id == id }) {
+                RestoreFileSheet(document: document, commit: commit)
+                    .environmentObject(library)
+            }
         }
     }
 }

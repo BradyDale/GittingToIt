@@ -58,3 +58,9 @@ struct RelatedCopyResult: Sendable {
     let copyURL: URL
     let notesURL: URL
 }
+
+struct FileRestoreResult: Sendable {
+    let restoredURL: URL
+    let sourceCommit: CommitSummary
+    let safetyCommit: CommitSummary?
+}

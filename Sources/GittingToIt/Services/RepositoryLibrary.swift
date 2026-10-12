@@ -151,6 +151,33 @@ final class RepositoryLibrary: ObservableObject {
         refreshSelected()
     }
 
+    func saveCheckpoint(paths: [String], message: String) async throws -> CommitSummary {
+        guard let repository = selectedRepository else { throw GitClientError.noFilesSelected }
+        let commit = try await Task.detached {
+            try GitClient().commitSelected(in: repository.folderURL, paths: paths, message: message)
+        }.value
+        refreshSelected()
+        return commit
+    }
+
+    func restore(
+        _ document: WritingDocument,
+        from commit: CommitSummary,
+        note: String
+    ) async throws -> FileRestoreResult {
+        guard let repository = selectedRepository else { throw FileNoteError.fileOutsideRepository }
+        let result = try await Task.detached {
+            try GitClient().restoreFile(
+                in: repository.folderURL,
+                relativePath: document.relativePath,
+                from: commit,
+                note: note
+            )
+        }.value
+        refreshSelected()
+        return result
+    }
+
     private func defaultSyncFolder() -> URL {
         let home = FileManager.default.homeDirectoryForCurrentUser
         let documentsSync = home.appendingPathComponent("Documents/Sync", isDirectory: true)

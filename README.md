@@ -20,8 +20,10 @@ The native macOS prototype includes:
 - Documented related copies named `filename c YYYYMMDD.ext`
 - Required purpose notes for copies
 - A bold, high-contrast visual system inspired by the supplied mood board
+- Selective checkpoints that cannot include unrelated staged work
+- Safe one-file restoration with an automatic safety checkpoint for current edits
 
-Commit-writing and restoration controls are visibly guarded while their safety workflows are implemented and tested.
+Compare/reconcile and richer text-diff views remain planned work.
 
 ## Run locally
 
