@@ -13,6 +13,7 @@ The native macOS prototype includes:
 - Repository tabs and removal from the local library without deleting data
 - Branch, current commit, and working-change summaries
 - Commit history with hashes, dates, times, messages, and changed files
+- Fast document and commit-history filtering
 - Writing-document discovery for Markdown, text, RTF, Word, and PDF files
 - Creation, modification, and last-committed dates
 - Per-file Git history

@@ -12,6 +12,8 @@ struct RepositoryDashboard: View {
     @State private var showingCommitSheet = false
     @State private var showingFileHistory = false
     @State private var showingNotes = false
+    @State private var documentSearch = ""
+    @State private var historySearch = ""
 
     var body: some View {
         HSplitView {
@@ -54,7 +56,13 @@ struct RepositoryDashboard: View {
                 .font(.system(size: 11, weight: .black, design: .monospaced))
                 .tracking(1.6)
 
-            List(snapshot.documents, selection: $selectedDocument) { document in
+            TextField("Find a document", text: $documentSearch)
+                .textFieldStyle(.plain)
+                .padding(9)
+                .background(.white)
+                .overlay(Rectangle().stroke(GTTheme.ink, lineWidth: 1.5))
+
+            List(filteredDocuments, selection: $selectedDocument) { document in
                 DocumentRow(document: document)
                     .tag(document)
             }
@@ -109,7 +117,13 @@ struct RepositoryDashboard: View {
                     .foregroundStyle(GTTheme.gray)
             }
 
-            Table(snapshot.commits, selection: $selectedCommitID) {
+            TextField("Search message, hash, author, or date", text: $historySearch)
+                .textFieldStyle(.plain)
+                .padding(9)
+                .background(.white)
+                .overlay(Rectangle().stroke(GTTheme.ink, lineWidth: 1.5))
+
+            Table(filteredCommits, selection: $selectedCommitID) {
                 TableColumn("Hash") { commit in Text(commit.shortHash).monospaced() }
                     .width(76)
                 TableColumn("Date") { commit in
@@ -156,6 +170,27 @@ struct RepositoryDashboard: View {
         }
         .padding(16)
         .background(GTTheme.paper)
+    }
+
+    private var filteredDocuments: [WritingDocument] {
+        let query = documentSearch.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return snapshot.documents }
+        return snapshot.documents.filter {
+            $0.relativePath.localizedCaseInsensitiveContains(query)
+        }
+    }
+
+    private var filteredCommits: [CommitSummary] {
+        let query = historySearch.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return snapshot.commits }
+        return snapshot.commits.filter { commit in
+            let date = commit.date?.formatted(.dateTime.year().month().day().hour().minute()) ?? ""
+            return commit.hash.localizedCaseInsensitiveContains(query) ||
+                commit.shortHash.localizedCaseInsensitiveContains(query) ||
+                commit.message.localizedCaseInsensitiveContains(query) ||
+                commit.author.localizedCaseInsensitiveContains(query) ||
+                date.localizedCaseInsensitiveContains(query)
+        }
     }
 }
 
