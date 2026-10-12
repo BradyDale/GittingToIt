@@ -57,15 +57,22 @@ struct GitClient: Sendable {
     }
 
     func changes(in root: URL) throws -> [GitChange] {
-        let output = try run(["-C", root.path, "status", "--porcelain=v1", "--untracked-files=all"])
-        return output.split(separator: "\n", omittingEmptySubsequences: true).compactMap { line in
-            let text = String(line)
-            guard text.count >= 4 else { return nil }
-            let status = String(text.prefix(2)).trimmingCharacters(in: .whitespaces)
-            let rawPath = String(text.dropFirst(3))
-            let path = rawPath.components(separatedBy: " -> ").last ?? rawPath
-            return GitChange(status: status, path: path.trimmingCharacters(in: CharacterSet(charactersIn: "\"")))
+        let output = try run([
+            "-C", root.path, "status", "--porcelain=v1", "-z", "--untracked-files=all"
+        ], trimOutput: false)
+        let records = output.split(separator: "\0", omittingEmptySubsequences: true).map(String.init)
+        var result: [GitChange] = []
+        var index = 0
+        while index < records.count {
+            let record = records[index]
+            guard record.count >= 4 else { index += 1; continue }
+            let rawStatus = String(record.prefix(2))
+            let status = rawStatus.trimmingCharacters(in: .whitespaces)
+            let path = String(record.dropFirst(3))
+            result.append(GitChange(status: status, path: path))
+            index += (rawStatus.contains("R") || rawStatus.contains("C")) ? 2 : 1
         }
+        return result
     }
 
     func commits(in root: URL, limit: Int = 250) throws -> [CommitSummary] {
@@ -250,28 +257,41 @@ struct GitClient: Sendable {
             }
             .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
 
+        let datesByPath = documentDates(in: root)
         return paths.map { relativePath in
             let fileURL = root.appendingPathComponent(relativePath)
             let values = try? fileURL.resourceValues(forKeys: [.creationDateKey, .contentModificationDateKey])
-            let gitDates = gitDates(in: root, relativePath: relativePath)
+            let gitDates = datesByPath[relativePath]
             return WritingDocument(
                 relativePath: relativePath,
-                createdAt: gitDates.first ?? values?.creationDate,
+                createdAt: gitDates?.first ?? values?.creationDate,
                 modifiedAt: values?.contentModificationDate,
-                lastCommittedAt: gitDates.last,
-                creationSource: gitDates.first == nil ? .fileSystem : .gitHistory
+                lastCommittedAt: gitDates?.last,
+                creationSource: gitDates?.first == nil ? .fileSystem : .gitHistory
             )
         }
     }
 
-    private func gitDates(in root: URL, relativePath: String) -> (first: Date?, last: Date?) {
-        let allDates = try? run([
-            "-C", root.path, "log", "--follow", "--format=%aI", "--", relativePath
+    private func documentDates(in root: URL) -> [String: (first: Date, last: Date)] {
+        let history = try? run([
+            "-C", root.path, "log", "--date=iso-strict", "--format=__GTDATE__%aI", "--name-only"
         ])
-        let dates = (allDates ?? "").split(separator: "\n").compactMap {
-            Self.isoDate(String($0))
+        var result: [String: (first: Date, last: Date)] = [:]
+        var currentDate: Date?
+
+        for line in (history ?? "").split(separator: "\n", omittingEmptySubsequences: false) {
+            let text = String(line)
+            if text.hasPrefix("__GTDATE__") {
+                currentDate = Self.isoDate(String(text.dropFirst("__GTDATE__".count)))
+            } else if !text.isEmpty, let date = currentDate {
+                if let existing = result[text] {
+                    result[text] = (first: date, last: existing.last)
+                } else {
+                    result[text] = (first: date, last: date)
+                }
+            }
         }
-        return (dates.last, dates.first)
+        return result
     }
 
     private func parseCommits(_ output: String) -> [CommitSummary] {

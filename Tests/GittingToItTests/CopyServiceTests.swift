@@ -176,4 +176,26 @@ struct GitClientCommitTests {
         #expect(diff.contains("[-quiet.-]"))
         #expect(diff.contains("{+loud.+}"))
     }
+
+    @Test func statusPreservesSpacesAndUsesNewNameForRenames() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let git = GitClient()
+        try git.initializeRepository(at: root)
+        _ = try git.run(["-C", root.path, "config", "user.name", "Test Writer"])
+        _ = try git.run(["-C", root.path, "config", "user.email", "writer@example.invalid"])
+        try "Draft".write(to: root.appendingPathComponent("Old Chapter.md"), atomically: true, encoding: .utf8)
+        _ = try git.run(["-C", root.path, "add", "."])
+        _ = try git.run(["-C", root.path, "commit", "--no-gpg-sign", "-m", "Initial"])
+        _ = try git.run(["-C", root.path, "mv", "Old Chapter.md", "New Chapter.md"])
+        try "Loose".write(to: root.appendingPathComponent("Loose Notes.md"), atomically: true, encoding: .utf8)
+
+        let changes = try git.changes(in: root)
+        #expect(changes.contains { $0.path == "New Chapter.md" && $0.status.contains("R") })
+        #expect(changes.contains { $0.path == "Loose Notes.md" && $0.status == "??" })
+        #expect(!changes.contains { $0.path == "Old Chapter.md" })
+    }
 }
