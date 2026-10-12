@@ -1,0 +1,23 @@
+.DS_Store
+.build/
+.swiftpm/
+DerivedData/
+*.xcuserstate
+*.xccheckout
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+
+# Local-only settings and private repository catalogs
+*.local.json
+repositories.json
+.env
+.env.*
+!.env.example
+
+# Signing, credentials, and generated application bundles
+*.p12
+*.mobileprovision
+*.key
+*.pem
+*.app
+*.dSYM/
