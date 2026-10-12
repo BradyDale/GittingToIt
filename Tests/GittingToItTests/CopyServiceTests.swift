@@ -154,4 +154,26 @@ struct GitClientCommitTests {
         #expect(status.contains("Other.md"))
         #expect(status.contains(CopyService.notesFilename))
     }
+
+    @Test func wordDiffExplainsHistoricalChangesToCurrentFile() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let git = GitClient()
+        try git.initializeRepository(at: root)
+        _ = try git.run(["-C", root.path, "config", "user.name", "Test Writer"])
+        _ = try git.run(["-C", root.path, "config", "user.email", "writer@example.invalid"])
+        try "The river was quiet.".write(to: root.appendingPathComponent("Chapter.md"), atomically: true, encoding: .utf8)
+        _ = try git.run(["-C", root.path, "add", "."])
+        _ = try git.run(["-C", root.path, "commit", "--no-gpg-sign", "-m", "Initial"])
+        let source = try #require(git.commits(in: root, limit: 1).first)
+
+        try "The river was loud.".write(to: root.appendingPathComponent("Chapter.md"), atomically: true, encoding: .utf8)
+        let diff = try git.wordDiffFromWorkingFile(in: root, relativePath: "Chapter.md", from: source.hash)
+
+        #expect(diff.contains("[-quiet.-]"))
+        #expect(diff.contains("{+loud.+}"))
+    }
 }

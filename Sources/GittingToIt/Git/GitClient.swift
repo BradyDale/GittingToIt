@@ -100,6 +100,23 @@ struct GitClient: Sendable {
         try run(["-C", root.path, "show", "\(commit):\(relativePath)"], trimOutput: false)
     }
 
+    func wordDiffFromWorkingFile(in root: URL, relativePath: String, from commit: String) throws -> String {
+        let raw = try run([
+            "-C", root.path, "diff", "--word-diff=plain", "--no-color", commit, "--", relativePath
+        ], trimOutput: false)
+        return raw.split(separator: "\n", omittingEmptySubsequences: false)
+            .map(String.init)
+            .filter { line in
+                !line.hasPrefix("diff --git ") &&
+                !line.hasPrefix("index ") &&
+                !line.hasPrefix("--- ") &&
+                !line.hasPrefix("+++ ") &&
+                !line.hasPrefix("@@ ")
+            }
+            .joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     func fileData(in root: URL, relativePath: String, at commit: String) throws -> Data {
         let process = Process()
         let stdout = Pipe()

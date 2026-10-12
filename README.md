@@ -16,6 +16,7 @@ The native macOS prototype includes:
 - Writing-document discovery for Markdown, text, RTF, Word, and PDF files
 - Creation, modification, and last-committed dates
 - Per-file Git history
+- Exact historical text preview and word-focused comparison with the current file
 - Reading and adding human-readable `GittingToIt Notes.md` entries
 - Documented related copies named `filename c YYYYMMDD.ext`
 - Required purpose notes for copies

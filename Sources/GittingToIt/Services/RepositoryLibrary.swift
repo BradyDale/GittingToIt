@@ -115,6 +115,28 @@ final class RepositoryLibrary: ObservableObject {
         }.value
     }
 
+    func historicalText(for document: WritingDocument, at commit: CommitSummary) async throws -> String {
+        guard let repository = selectedRepository else { return "" }
+        return try await Task.detached {
+            try GitClient().text(
+                in: repository.folderURL,
+                relativePath: document.relativePath,
+                at: commit.hash
+            )
+        }.value
+    }
+
+    func wordDiffToCurrent(for document: WritingDocument, from commit: CommitSummary) async throws -> String {
+        guard let repository = selectedRepository else { return "" }
+        return try await Task.detached {
+            try GitClient().wordDiffFromWorkingFile(
+                in: repository.folderURL,
+                relativePath: document.relativePath,
+                from: commit.hash
+            )
+        }.value
+    }
+
     func notes(for document: WritingDocument) -> String {
         guard let repository = selectedRepository else { return "" }
         let url = CopyService().notesURL(repositoryRoot: repository.folderURL, relativePath: document.relativePath)

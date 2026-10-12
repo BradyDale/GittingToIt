@@ -10,6 +10,15 @@ struct FileHistoryView: View {
     @State private var errorMessage: String?
     @State private var selectedCommitID: CommitSummary.ID?
     @State private var showingRestore = false
+    @State private var detailMode = DetailMode.version
+    @State private var detailText = "Select a checkpoint to inspect this file."
+    @State private var isLoadingDetail = false
+
+    private enum DetailMode: String, CaseIterable, Identifiable {
+        case version = "This version"
+        case changes = "Changes to current"
+        var id: String { rawValue }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -34,29 +43,57 @@ struct FileHistoryView: View {
             } else if let errorMessage {
                 ContentUnavailableView("History unavailable", systemImage: "exclamationmark.triangle", description: Text(errorMessage))
             } else {
-                List(commits, selection: $selectedCommitID) { commit in
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text(commit.message).fontWeight(.medium)
-                        HStack {
-                            Text(commit.shortHash).monospaced()
-                            Text(commit.date?.formatted(.dateTime.year().month(.abbreviated).day().hour().minute()) ?? "Unknown date")
-                            Text(commit.author)
+                HSplitView {
+                    List(commits, selection: $selectedCommitID) { commit in
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(commit.message).fontWeight(.medium)
+                            HStack {
+                                Text(commit.shortHash).monospaced()
+                                Text(commit.date?.formatted(.dateTime.year().month(.abbreviated).day().hour().minute()) ?? "Unknown date")
+                                Text(commit.author)
+                            }
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                         }
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 3)
                     }
-                    .padding(.vertical, 3)
+                    .frame(minWidth: 300, idealWidth: 340, maxWidth: 380)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Picker("", selection: $detailMode) {
+                            ForEach(DetailMode.allCases) { Text($0.rawValue).tag($0) }
+                        }
+                        .pickerStyle(.segmented)
+
+                        if isLoadingDetail {
+                            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                        } else {
+                            ScrollView([.horizontal, .vertical]) {
+                                Text(detailText)
+                                    .font(.system(.body, design: .monospaced))
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                                    .padding(14)
+                            }
+                            .background(.white)
+                            .overlay(Rectangle().stroke(GTTheme.ink, lineWidth: 1.5))
+                        }
+                    }
+                    .padding(.leading, 10)
+                    .frame(minWidth: 420)
                 }
             }
         }
         .padding(20)
         .background(GTTheme.paper)
-        .frame(minWidth: 680, minHeight: 480)
+        .frame(width: 1_050, height: 680)
         .task {
             do { commits = try await library.history(for: document) }
             catch { errorMessage = error.localizedDescription }
             isLoading = false
         }
+        .onChange(of: selectedCommitID) { _, _ in loadDetail() }
+        .onChange(of: detailMode) { _, _ in loadDetail() }
         .sheet(isPresented: $showingRestore) {
             if let id = selectedCommitID,
                let commit = commits.first(where: { $0.id == id }) {
@@ -64,6 +101,37 @@ struct FileHistoryView: View {
                     .environmentObject(library)
             }
         }
+    }
+
+    private func loadDetail() {
+        guard documentSupportsTextPreview,
+              let id = selectedCommitID,
+              let commit = commits.first(where: { $0.id == id }) else {
+            detailText = documentSupportsTextPreview
+                ? "Select a checkpoint to inspect this file."
+                : "Text preview is not available for .\(document.fileExtension) files. The complete file version can still be restored."
+            return
+        }
+
+        isLoadingDetail = true
+        Task {
+            do {
+                switch detailMode {
+                case .version:
+                    detailText = try await library.historicalText(for: document, at: commit)
+                case .changes:
+                    let diff = try await library.wordDiffToCurrent(for: document, from: commit)
+                    detailText = diff.isEmpty ? "No differences from the current file." : diff
+                }
+            } catch {
+                detailText = "Preview unavailable: \(error.localizedDescription)"
+            }
+            isLoadingDetail = false
+        }
+    }
+
+    private var documentSupportsTextPreview: Bool {
+        ["md", "markdown", "txt", "rtf"].contains(document.fileExtension)
     }
 }
 
