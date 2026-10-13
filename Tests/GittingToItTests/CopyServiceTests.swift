@@ -122,6 +122,49 @@ struct CopyServiceTests {
 }
 
 struct GitClientCommitTests {
+    @Test func newRepositoryStartsWithAPrivateIgnoredFolder() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let git = GitClient()
+        try git.initializeRepository(at: root)
+        let privateFolder = root.appendingPathComponent("Git Ignore", isDirectory: true)
+        #expect(FileManager.default.fileExists(atPath: privateFolder.path))
+
+        try "private".write(
+            to: privateFolder.appendingPathComponent("Anything.txt"),
+            atomically: true,
+            encoding: .utf8
+        )
+        let ignored = try git.run(["-C", root.path, "check-ignore", "Git Ignore/Anything.txt"])
+        #expect(ignored == "Git Ignore/Anything.txt")
+    }
+
+    @Test func commandRunnerHandlesOutputLargerThanAPipeBuffer() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let git = GitClient()
+        try git.initializeRepository(at: root)
+        _ = try git.run(["-C", root.path, "config", "user.name", "Test Writer"])
+        _ = try git.run(["-C", root.path, "config", "user.email", "writer@example.invalid"])
+        let largeText = String(repeating: "A long writing line for output testing.\n", count: 20_000)
+        try largeText.write(to: root.appendingPathComponent("Long Draft.md"), atomically: true, encoding: .utf8)
+        _ = try git.run(["-C", root.path, "add", "."])
+        _ = try git.run(["-C", root.path, "commit", "--no-gpg-sign", "-m", "Large draft"])
+
+        let recovered = try git.run(
+            ["-C", root.path, "show", "HEAD:Long Draft.md"],
+            trimOutput: false
+        )
+
+        #expect(recovered == largeText)
+    }
+
     @Test func selectedCommitDoesNotIncludeOrUnstageOtherWork() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

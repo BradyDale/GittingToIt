@@ -36,6 +36,26 @@ struct GitClient: Sendable {
 
     func initializeRepository(at folder: URL) throws {
         _ = try run(["-C", folder.path, "init"])
+        try preparePrivateFolder(in: folder)
+    }
+
+    private func preparePrivateFolder(in root: URL) throws {
+        let privateFolder = root.appendingPathComponent("Git Ignore", isDirectory: true)
+        try FileManager.default.createDirectory(at: privateFolder, withIntermediateDirectories: true)
+
+        let ignoreURL = root.appendingPathComponent(".gitignore")
+        let requiredRules = [".DS_Store", "Git Ignore/"]
+        var existing = (try? String(contentsOf: ignoreURL, encoding: .utf8)) ?? ""
+        let existingLines = Set(existing.split(separator: "\n").map(String.init))
+        let missingRules = requiredRules.filter { !existingLines.contains($0) }
+        guard !missingRules.isEmpty else { return }
+
+        if !existing.isEmpty, !existing.hasSuffix("\n") { existing += "\n" }
+        if existing.isEmpty {
+            existing = "# Local files that must never enter Git history.\n"
+        }
+        existing += missingRules.joined(separator: "\n") + "\n"
+        try existing.write(to: ignoreURL, atomically: true, encoding: .utf8)
     }
 
     func snapshot(for repository: RepositoryReference) throws -> RepositorySnapshot {
@@ -125,25 +145,15 @@ struct GitClient: Sendable {
     }
 
     func fileData(in root: URL, relativePath: String, at commit: String) throws -> Data {
-        let process = Process()
-        let stdout = Pipe()
-        let stderr = Pipe()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        process.arguments = ["-C", root.path, "show", "\(commit):./\(relativePath)"]
-        process.standardOutput = stdout
-        process.standardError = stderr
-        try process.run()
-        process.waitUntilExit()
-
-        let data = stdout.fileHandleForReading.readDataToEndOfFile()
-        let errorData = stderr.fileHandleForReading.readDataToEndOfFile()
-        guard process.terminationStatus == 0 else {
+        let arguments = ["-C", root.path, "show", "\(commit):./\(relativePath)"]
+        let result = try execute(arguments)
+        guard result.status == 0 else {
             throw GitClientError.commandFailed(
-                arguments: process.arguments ?? [],
-                message: String(decoding: errorData, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+                arguments: arguments,
+                message: String(decoding: result.error, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
             )
         }
-        return data
+        return result.output
     }
 
     func hasWorkingChange(in root: URL, relativePath: String) throws -> Bool {
@@ -257,41 +267,17 @@ struct GitClient: Sendable {
             }
             .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
 
-        let datesByPath = documentDates(in: root)
         return paths.map { relativePath in
             let fileURL = root.appendingPathComponent(relativePath)
             let values = try? fileURL.resourceValues(forKeys: [.creationDateKey, .contentModificationDateKey])
-            let gitDates = datesByPath[relativePath]
             return WritingDocument(
                 relativePath: relativePath,
-                createdAt: gitDates?.first ?? values?.creationDate,
+                createdAt: values?.creationDate,
                 modifiedAt: values?.contentModificationDate,
-                lastCommittedAt: gitDates?.last,
-                creationSource: gitDates?.first == nil ? .fileSystem : .gitHistory
+                lastCommittedAt: nil,
+                creationSource: .fileSystem
             )
         }
-    }
-
-    private func documentDates(in root: URL) -> [String: (first: Date, last: Date)] {
-        let history = try? run([
-            "-C", root.path, "log", "--date=iso-strict", "--format=__GTDATE__%aI", "--name-only"
-        ])
-        var result: [String: (first: Date, last: Date)] = [:]
-        var currentDate: Date?
-
-        for line in (history ?? "").split(separator: "\n", omittingEmptySubsequences: false) {
-            let text = String(line)
-            if text.hasPrefix("__GTDATE__") {
-                currentDate = Self.isoDate(String(text.dropFirst("__GTDATE__".count)))
-            } else if !text.isEmpty, let date = currentDate {
-                if let existing = result[text] {
-                    result[text] = (first: date, last: existing.last)
-                } else {
-                    result[text] = (first: date, last: date)
-                }
-            }
-        }
-        return result
     }
 
     private func parseCommits(_ output: String) -> [CommitSummary] {
@@ -321,24 +307,11 @@ struct GitClient: Sendable {
         allowEmptyRepository: Bool = false,
         environment: [String: String] = [:]
     ) throws -> String {
-        let process = Process()
-        let stdout = Pipe()
-        let stderr = Pipe()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        process.arguments = arguments
-        process.environment = ProcessInfo.processInfo.environment.merging(environment) { _, override in override }
-        process.standardOutput = stdout
-        process.standardError = stderr
+        let result = try execute(arguments, environment: environment)
+        let output = String(decoding: result.output, as: UTF8.self)
+        let message = String(decoding: result.error, as: UTF8.self)
 
-        try process.run()
-        process.waitUntilExit()
-
-        let outputData = stdout.fileHandleForReading.readDataToEndOfFile()
-        let errorData = stderr.fileHandleForReading.readDataToEndOfFile()
-        let output = String(decoding: outputData, as: UTF8.self)
-        let message = String(decoding: errorData, as: UTF8.self)
-
-        if process.terminationStatus != 0 {
+        if result.status != 0 {
             if allowEmptyRepository && message.localizedCaseInsensitiveContains("does not have any commits") {
                 return ""
             }
@@ -348,5 +321,49 @@ struct GitClient: Sendable {
             )
         }
         return trimOutput ? output.trimmingCharacters(in: .whitespacesAndNewlines) : output
+    }
+
+    /// File-backed output avoids the classic pipe deadlock where Git fills a pipe while the
+    /// caller is waiting for Git to exit. Repositories with substantial history can easily
+    /// exceed the operating system's small pipe buffer.
+    private func execute(
+        _ arguments: [String],
+        environment: [String: String] = [:]
+    ) throws -> (output: Data, error: Data, status: Int32) {
+        let temporaryFolder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("GittingToIt-Process-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: temporaryFolder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryFolder) }
+
+        let outputURL = temporaryFolder.appendingPathComponent("stdout")
+        let errorURL = temporaryFolder.appendingPathComponent("stderr")
+        FileManager.default.createFile(atPath: outputURL.path, contents: nil)
+        FileManager.default.createFile(atPath: errorURL.path, contents: nil)
+
+        let outputHandle = try FileHandle(forWritingTo: outputURL)
+        let errorHandle = try FileHandle(forWritingTo: errorURL)
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        process.arguments = arguments
+        process.environment = ProcessInfo.processInfo.environment.merging(environment) { _, override in override }
+        process.standardOutput = outputHandle
+        process.standardError = errorHandle
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+            try outputHandle.close()
+            try errorHandle.close()
+        } catch {
+            try? outputHandle.close()
+            try? errorHandle.close()
+            throw error
+        }
+
+        return (
+            output: try Data(contentsOf: outputURL),
+            error: try Data(contentsOf: errorURL),
+            status: process.terminationStatus
+        )
     }
 }

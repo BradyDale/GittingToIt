@@ -11,6 +11,7 @@ binary_dir=$(swift build --disable-sandbox -c "$configuration" --show-bin-path)
 mkdir -p "$app_dir/Contents/MacOS" "$app_dir/Contents/Resources"
 cp "$binary_dir/GittingToIt" "$app_dir/Contents/MacOS/GittingToIt"
 cp "$project_dir/Resources/Info.plist" "$app_dir/Contents/Info.plist"
+cp "$project_dir/Resources/GittingToIt.icns" "$app_dir/Contents/Resources/GittingToIt.icns"
 printf 'APPL????' > "$app_dir/Contents/PkgInfo"
 xattr -cr "$app_dir"
 codesign --force --deep --sign - "$app_dir" >/dev/null
