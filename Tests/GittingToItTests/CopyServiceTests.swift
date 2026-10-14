@@ -122,6 +122,60 @@ struct CopyServiceTests {
 }
 
 struct GitClientCommitTests {
+    @Test func ignoreOnlyCheckpointFiltersStaleIgnoredSelections() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let git = GitClient()
+        try git.initializeRepository(at: root)
+        _ = try git.run(["-C", root.path, "config", "user.name", "Test Writer"])
+        _ = try git.run(["-C", root.path, "config", "user.email", "writer@example.invalid"])
+        try Data([1, 2, 3]).write(to: root.appendingPathComponent("cover.jpg"))
+        _ = try git.ignoreFiles(
+            in: root,
+            relativePaths: ["cover.jpg"],
+            rules: ["*.jpg"]
+        )
+
+        let commit = try git.commitSelected(
+            in: root,
+            paths: [".gitignore", "cover.jpg"],
+            message: "Ignore images"
+        )
+
+        #expect(commit.message == "Ignore images")
+        #expect(try git.run(["-C", root.path, "show", "--format=", "--name-only", "HEAD"]) == ".gitignore")
+        #expect(FileManager.default.fileExists(atPath: root.appendingPathComponent("cover.jpg").path))
+    }
+
+    @Test func batchDSStoreIgnoreFindsAlreadyTrackedCopies() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let git = GitClient()
+        try git.initializeRepository(at: root)
+        _ = try git.run(["-C", root.path, "config", "user.name", "Test Writer"])
+        _ = try git.run(["-C", root.path, "config", "user.email", "writer@example.invalid"])
+        let nested = root.appendingPathComponent("Drafts", isDirectory: true)
+        try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+        try "finder data".write(to: nested.appendingPathComponent(".DS_Store"), atomically: true, encoding: .utf8)
+        _ = try git.run(["-C", root.path, "add", "-f", ".gitignore", "Drafts/.DS_Store"])
+        _ = try git.run(["-C", root.path, "commit", "--no-gpg-sign", "-m", "Initial"])
+
+        let results = try git.ignoreFiles(
+            in: root,
+            relativePaths: [],
+            rules: [".DS_Store"],
+            includeEveryTrackedDSStore: true
+        )
+
+        #expect(results.contains { $0.path == "Drafts/.DS_Store" && $0.wasTracked })
+    }
+
     @Test func ignoreUntrackedFileAddsExactRuleWithoutDeletingFile() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

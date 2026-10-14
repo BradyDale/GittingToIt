@@ -181,6 +181,22 @@ final class RepositoryLibrary: ObservableObject {
         return result
     }
 
+    func ignoreFiles(
+        paths: [String],
+        rules: [String],
+        includeEveryTrackedDSStore: Bool = false
+    ) async throws -> [IgnoreFileResult] {
+        guard let repository = selectedRepository else { throw GitClientError.noFilesSelected }
+        return try await Task.detached {
+            try GitClient().ignoreFiles(
+                in: repository.folderURL,
+                relativePaths: paths,
+                rules: rules,
+                includeEveryTrackedDSStore: includeEveryTrackedDSStore
+            )
+        }.value
+    }
+
     func saveCheckpoint(
         paths: [String],
         stopTrackingPaths: [String] = [],

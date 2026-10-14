@@ -1,6 +1,11 @@
 import SwiftUI
 
 struct ReviewCommitSheet: View {
+    private static let imageExtensions: Set<String> = [
+        "jpg", "jpeg", "png", "heic", "tif", "tiff", "gif", "webp", "bmp", "psd"
+    ]
+    private static let imageRules = imageExtensions.sorted().map { "*.\($0)" }
+
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var library: RepositoryLibrary
 
@@ -30,6 +35,14 @@ struct ReviewCommitSheet: View {
             } else {
                 Text("Only checked files will be included. Unrelated staged work remains staged.")
                     .foregroundStyle(.secondary)
+
+                HStack {
+                    Button("Ignore All .DS_Store") { ignoreAllDSStores() }
+                        .buttonStyle(GTActionButtonStyle(color: GTTheme.yellow))
+                    Button("Ignore All Images") { ignoreAllImages() }
+                        .buttonStyle(GTActionButtonStyle(color: GTTheme.yellow))
+                }
+                .disabled(isSaving)
 
                 if changes.contains(where: { $0.path.range(of: #" c \d{8}"#, options: .regularExpression) != nil }) {
                     Text("A related copy changed. Your checkpoint message will also be added to its File Notes.")
@@ -95,6 +108,13 @@ struct ReviewCommitSheet: View {
                 HStack {
                     Button("Cancel") { dismiss() }
                         .buttonStyle(GTActionButtonStyle())
+                    if !stopTrackingPaths.isEmpty || selectedPaths.contains(".gitignore") {
+                        Button(isSaving ? "Saving…" : "Save Ignore Rules") {
+                            saveIgnores()
+                        }
+                        .buttonStyle(GTActionButtonStyle(color: GTTheme.yellow))
+                        .disabled(isSaving || message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
                     Button(isSaving ? "Saving…" : "Save Checkpoint") {
                         save()
                     }
@@ -140,6 +160,10 @@ struct ReviewCommitSheet: View {
     }
 
     private func ignore(_ change: GitChange) {
+        if URL(fileURLWithPath: change.path).lastPathComponent == ".DS_Store" {
+            ignoreAllDSStores()
+            return
+        }
         Task {
             do {
                 let result = try await library.ignoreFile(path: change.path)
@@ -157,6 +181,73 @@ struct ReviewCommitSheet: View {
             } catch {
                 errorMessage = error.localizedDescription
             }
+        }
+    }
+
+    private func ignoreAllDSStores() {
+        let matching = changes.filter {
+            URL(fileURLWithPath: $0.path).lastPathComponent == ".DS_Store"
+        }
+        ignoreBatch(
+            matching,
+            rules: [".DS_Store"],
+            includeEveryTrackedDSStore: true,
+            label: ".DS_Store files"
+        )
+    }
+
+    private func ignoreAllImages() {
+        let matching = changes.filter {
+            Self.imageExtensions.contains(URL(fileURLWithPath: $0.path).pathExtension.lowercased())
+        }
+        ignoreBatch(matching, rules: Self.imageRules, label: "image files")
+    }
+
+    private func ignoreBatch(
+        _ matching: [GitChange],
+        rules: [String],
+        includeEveryTrackedDSStore: Bool = false,
+        label: String
+    ) {
+        Task {
+            do {
+                let results = try await library.ignoreFiles(
+                    paths: matching.map(\.path),
+                    rules: rules,
+                    includeEveryTrackedDSStore: includeEveryTrackedDSStore
+                )
+                ignoredPaths.formUnion(matching.map(\.path))
+                for result in results {
+                    if result.wasTracked {
+                        stopTrackingPaths.insert(result.path)
+                        selectedPaths.insert(result.path)
+                    } else {
+                        selectedPaths.remove(result.path)
+                    }
+                }
+                selectedPaths.insert(".gitignore")
+                let trackedCount = results.filter(\.wasTracked).count
+                ignoreNotice = "Ignored \(matching.count) changed \(label). \(trackedCount) already-tracked files will stay on your Mac and leave Git when you save the ignore rules."
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func saveIgnores() {
+        isSaving = true
+        errorMessage = nil
+        Task {
+            do {
+                savedCommit = try await library.saveCheckpoint(
+                    paths: Array(stopTrackingPaths) + [".gitignore"],
+                    stopTrackingPaths: Array(stopTrackingPaths),
+                    message: message
+                )
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            isSaving = false
         }
     }
 }

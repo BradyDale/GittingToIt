@@ -10,7 +10,8 @@ enum GitClientError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case let .commandFailed(arguments, message):
-            return "Git could not complete ‘git \(arguments.joined(separator: " "))’: \(message)"
+            let operation = arguments.first { !$0.hasPrefix("-") && !$0.contains("/") } ?? "operation"
+            return "Git could not complete the \(operation): \(message)"
         case let .notARepository(url):
             return "\(url.lastPathComponent) is not a Git repository."
         case .emptyCommitMessage:
@@ -161,21 +162,43 @@ struct GitClient: Sendable {
     }
 
     func ignoreFile(in root: URL, relativePath: String) throws -> IgnoreFileResult {
-        let rule = ignoreRule(for: relativePath)
+        try ignoreFiles(
+            in: root,
+            relativePaths: [relativePath],
+            rules: [ignoreRule(for: relativePath)]
+        ).first!
+    }
+
+    func ignoreFiles(
+        in root: URL,
+        relativePaths: [String],
+        rules: [String],
+        includeEveryTrackedDSStore: Bool = false
+    ) throws -> [IgnoreFileResult] {
         let ignoreURL = root.appendingPathComponent(".gitignore")
         var contents = (try? String(contentsOf: ignoreURL, encoding: .utf8)) ?? ""
-        let rules = Set(contents.split(separator: "\n", omittingEmptySubsequences: false).map(String.init))
+        var existingRules = Set(contents.split(separator: "\n", omittingEmptySubsequences: false).map(String.init))
 
-        if !rules.contains(rule) {
+        for rule in rules where !existingRules.contains(rule) {
             if !contents.isEmpty, !contents.hasSuffix("\n") { contents += "\n" }
             contents += rule + "\n"
-            try contents.write(to: ignoreURL, atomically: true, encoding: .utf8)
+            existingRules.insert(rule)
         }
+        try contents.write(to: ignoreURL, atomically: true, encoding: .utf8)
 
-        let wasTracked = (try? run([
-            "-C", root.path, "ls-files", "--error-unmatch", "--", relativePath
-        ])) != nil
-        return IgnoreFileResult(path: relativePath, rule: rule, wasTracked: wasTracked)
+        let tracked = Set(try run([
+            "-C", root.path, "ls-files", "-z"
+        ], trimOutput: false).split(separator: "\0").map(String.init))
+        var paths = Set(relativePaths)
+        if includeEveryTrackedDSStore {
+            paths.formUnion(tracked.filter {
+                URL(fileURLWithPath: $0).lastPathComponent == ".DS_Store"
+            })
+        }
+        let joinedRules = rules.joined(separator: ", ")
+        return paths.sorted().map {
+            IgnoreFileResult(path: $0, rule: joinedRules, wasTracked: tracked.contains($0))
+        }
     }
 
     func restoreFile(
@@ -253,7 +276,13 @@ struct GitClient: Sendable {
         }
 
         let stoppedPaths = Array(Set(stopTrackingPaths)).sorted()
-        let normallyAddedPaths = selectedPaths.filter { !stoppedPaths.contains($0) }
+        let normallyAddedCandidates = selectedPaths.filter { !stoppedPaths.contains($0) }
+        let tracked = Set(try run([
+            "-C", root.path, "ls-files", "-z"
+        ], trimOutput: false).split(separator: "\0").map(String.init))
+        let normallyAddedPaths = normallyAddedCandidates.filter { path in
+            tracked.contains(path) || !isIgnoredUntracked(in: root, relativePath: path)
+        }
         if !normallyAddedPaths.isEmpty {
             _ = try run(["-C", root.path, "add", "-A", "--"] + normallyAddedPaths, environment: environment)
         }
@@ -269,13 +298,22 @@ struct GitClient: Sendable {
         )
         guard !stagedNames.isEmpty else { throw GitClientError.noSelectedChanges }
 
-        _ = try run([
-            "-C", root.path, "commit", "--no-verify", "--no-gpg-sign", "-m", cleanMessage
-        ], environment: environment)
+        let tree = try run(["-C", root.path, "write-tree"], environment: environment)
+        let oldHead = try? run(["-C", root.path, "rev-parse", "--verify", "HEAD"])
+        var commitArguments = ["-C", root.path, "commit-tree", tree]
+        if let oldHead { commitArguments += ["-p", oldHead] }
+        commitArguments += ["-m", cleanMessage]
+        let newCommit = try run(commitArguments)
+        var updateArguments = [
+            "-C", root.path, "update-ref", "-m", "commit: \(cleanMessage)", "HEAD", newCommit
+        ]
+        if let oldHead { updateArguments.append(oldHead) }
+        _ = try run(updateArguments)
 
         // Bring only the committed paths in the real index forward to the new HEAD. Any staged
         // changes to unselected files stay staged exactly as they were.
-        _ = try run(["-C", root.path, "reset", "-q", "HEAD", "--"] + selectedPaths)
+        let committedPaths = Array(Set(normallyAddedPaths + stoppedPaths)).sorted()
+        _ = try run(["-C", root.path, "reset", "-q", "HEAD", "--"] + committedPaths)
 
         guard let commit = try commits(in: root, limit: 1).first else {
             throw GitClientError.commandFailed(arguments: ["log", "-1"], message: "The checkpoint was created but could not be read back.")
@@ -292,6 +330,12 @@ struct GitClient: Sendable {
             result.append(character)
         }
         return "/" + escaped
+    }
+
+    private func isIgnoredUntracked(in root: URL, relativePath: String) -> Bool {
+        (try? run([
+            "-C", root.path, "check-ignore", "--no-index", "-q", "--", relativePath
+        ])) != nil
     }
 
     private func documents(in root: URL) throws -> [WritingDocument] {
