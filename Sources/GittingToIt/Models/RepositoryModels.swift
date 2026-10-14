@@ -18,6 +18,12 @@ struct GitChange: Hashable, Identifiable, Sendable {
     var id: String { status + "\u{0}" + path }
 }
 
+struct IgnoreFileResult: Sendable {
+    let path: String
+    let rule: String
+    let wasTracked: Bool
+}
+
 struct CommitSummary: Hashable, Identifiable, Sendable {
     let hash: String
     let shortHash: String

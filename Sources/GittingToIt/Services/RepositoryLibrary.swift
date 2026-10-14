@@ -173,7 +173,19 @@ final class RepositoryLibrary: ObservableObject {
         refreshSelected()
     }
 
-    func saveCheckpoint(paths: [String], message: String) async throws -> CommitSummary {
+    func ignoreFile(path: String) async throws -> IgnoreFileResult {
+        guard let repository = selectedRepository else { throw GitClientError.noFilesSelected }
+        let result = try await Task.detached {
+            try GitClient().ignoreFile(in: repository.folderURL, relativePath: path)
+        }.value
+        return result
+    }
+
+    func saveCheckpoint(
+        paths: [String],
+        stopTrackingPaths: [String] = [],
+        message: String
+    ) async throws -> CommitSummary {
         guard let repository = selectedRepository,
               let snapshot = snapshots[repository.id] else { throw GitClientError.noFilesSelected }
         let commit = try await Task.detached {
@@ -186,6 +198,7 @@ final class RepositoryLibrary: ObservableObject {
             return try GitClient().commitSelected(
                 in: repository.folderURL,
                 paths: documentedPaths,
+                stopTrackingPaths: stopTrackingPaths,
                 message: message
             )
         }.value

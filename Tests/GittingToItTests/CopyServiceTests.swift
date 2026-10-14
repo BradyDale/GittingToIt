@@ -122,6 +122,54 @@ struct CopyServiceTests {
 }
 
 struct GitClientCommitTests {
+    @Test func ignoreUntrackedFileAddsExactRuleWithoutDeletingFile() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let git = GitClient()
+        try git.initializeRepository(at: root)
+        let file = root.appendingPathComponent("Audio/interview.mp3")
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data([1, 2, 3]).write(to: file)
+
+        let result = try git.ignoreFile(in: root, relativePath: "Audio/interview.mp3")
+
+        #expect(!result.wasTracked)
+        #expect(FileManager.default.fileExists(atPath: file.path))
+        #expect(try git.run(["-C", root.path, "check-ignore", "Audio/interview.mp3"]) == "Audio/interview.mp3")
+    }
+
+    @Test func ignoreTrackedFileStopsTrackingAtNextCheckpointWithoutDeletingIt() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let git = GitClient()
+        try git.initializeRepository(at: root)
+        _ = try git.run(["-C", root.path, "config", "user.name", "Test Writer"])
+        _ = try git.run(["-C", root.path, "config", "user.email", "writer@example.invalid"])
+        let file = root.appendingPathComponent("private notes.txt")
+        try "Keep me".write(to: file, atomically: true, encoding: .utf8)
+        _ = try git.run(["-C", root.path, "add", "."])
+        _ = try git.run(["-C", root.path, "commit", "--no-gpg-sign", "-m", "Initial"])
+
+        let result = try git.ignoreFile(in: root, relativePath: "private notes.txt")
+        _ = try git.commitSelected(
+            in: root,
+            paths: ["private notes.txt", ".gitignore"],
+            stopTrackingPaths: ["private notes.txt"],
+            message: "Ignore private notes"
+        )
+
+        #expect(result.wasTracked)
+        #expect(FileManager.default.fileExists(atPath: file.path))
+        #expect(try git.run(["-C", root.path, "ls-files", "--", "private notes.txt"]).isEmpty)
+        #expect(try git.run(["-C", root.path, "check-ignore", "private notes.txt"]) == "private notes.txt")
+    }
+
     @Test func newRepositoryStartsWithAPrivateIgnoredFolder() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

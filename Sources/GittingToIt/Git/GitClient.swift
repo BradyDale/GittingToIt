@@ -160,6 +160,24 @@ struct GitClient: Sendable {
         !(try run(["-C", root.path, "status", "--porcelain=v1", "--", relativePath])).isEmpty
     }
 
+    func ignoreFile(in root: URL, relativePath: String) throws -> IgnoreFileResult {
+        let rule = ignoreRule(for: relativePath)
+        let ignoreURL = root.appendingPathComponent(".gitignore")
+        var contents = (try? String(contentsOf: ignoreURL, encoding: .utf8)) ?? ""
+        let rules = Set(contents.split(separator: "\n", omittingEmptySubsequences: false).map(String.init))
+
+        if !rules.contains(rule) {
+            if !contents.isEmpty, !contents.hasSuffix("\n") { contents += "\n" }
+            contents += rule + "\n"
+            try contents.write(to: ignoreURL, atomically: true, encoding: .utf8)
+        }
+
+        let wasTracked = (try? run([
+            "-C", root.path, "ls-files", "--error-unmatch", "--", relativePath
+        ])) != nil
+        return IgnoreFileResult(path: relativePath, rule: rule, wasTracked: wasTracked)
+    }
+
     func restoreFile(
         in root: URL,
         relativePath: String,
@@ -212,6 +230,7 @@ struct GitClient: Sendable {
     func commitSelected(
         in root: URL,
         paths: [String],
+        stopTrackingPaths: [String] = [],
         message: String
     ) throws -> CommitSummary {
         let cleanMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -233,7 +252,17 @@ struct GitClient: Sendable {
             _ = try run(["-C", root.path, "read-tree", "--empty"], environment: environment)
         }
 
-        _ = try run(["-C", root.path, "add", "-A", "--"] + selectedPaths, environment: environment)
+        let stoppedPaths = Array(Set(stopTrackingPaths)).sorted()
+        let normallyAddedPaths = selectedPaths.filter { !stoppedPaths.contains($0) }
+        if !normallyAddedPaths.isEmpty {
+            _ = try run(["-C", root.path, "add", "-A", "--"] + normallyAddedPaths, environment: environment)
+        }
+        if !stoppedPaths.isEmpty {
+            _ = try run(
+                ["-C", root.path, "rm", "--cached", "-q", "--ignore-unmatch", "--"] + stoppedPaths,
+                environment: environment
+            )
+        }
         let stagedNames = try run(
             ["-C", root.path, "diff", "--cached", "--name-only"],
             environment: environment
@@ -252,6 +281,17 @@ struct GitClient: Sendable {
             throw GitClientError.commandFailed(arguments: ["log", "-1"], message: "The checkpoint was created but could not be read back.")
         }
         return commit
+    }
+
+    private func ignoreRule(for relativePath: String) -> String {
+        if URL(fileURLWithPath: relativePath).lastPathComponent == ".DS_Store" {
+            return ".DS_Store"
+        }
+        let escaped = relativePath.reduce(into: "") { result, character in
+            if "\\#![]*?".contains(character) { result.append("\\") }
+            result.append(character)
+        }
+        return "/" + escaped
     }
 
     private func documents(in root: URL) throws -> [WritingDocument] {

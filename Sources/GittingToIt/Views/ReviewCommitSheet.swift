@@ -9,6 +9,9 @@ struct ReviewCommitSheet: View {
     @State private var selectedPaths: Set<String>
     @State private var message = ""
     @State private var isSaving = false
+    @State private var ignoredPaths: Set<String> = []
+    @State private var stopTrackingPaths: Set<String> = []
+    @State private var ignoreNotice: String?
     @State private var errorMessage: String?
     @State private var savedCommit: CommitSummary?
 
@@ -39,20 +42,26 @@ struct ReviewCommitSheet: View {
 
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(changes) { change in
-                            Toggle(isOn: Binding(
-                                get: { selectedPaths.contains(change.path) },
-                                set: { checked in
-                                    if checked { selectedPaths.insert(change.path) }
-                                    else { selectedPaths.remove(change.path) }
+                        ForEach(changes.filter { !ignoredPaths.contains($0.path) }) { change in
+                            HStack {
+                                Toggle(isOn: Binding(
+                                    get: { selectedPaths.contains(change.path) },
+                                    set: { checked in
+                                        if checked { selectedPaths.insert(change.path) }
+                                        else { selectedPaths.remove(change.path) }
+                                    }
+                                )) {
+                                    HStack {
+                                        Text(change.status).monospaced().foregroundStyle(.secondary)
+                                        Text(change.path).textSelection(.enabled)
+                                    }
                                 }
-                            )) {
-                                HStack {
-                                    Text(change.status).monospaced().foregroundStyle(.secondary)
-                                    Text(change.path).textSelection(.enabled)
-                                }
+                                .toggleStyle(.checkbox)
+                                Spacer()
+                                Button("Ignore") { ignore(change) }
+                                    .buttonStyle(.borderless)
+                                    .help("Keep this file on your Mac but leave it out of future checkpoints.")
                             }
-                            .toggleStyle(.checkbox)
                             .padding(.vertical, 8)
                             Divider()
                         }
@@ -62,6 +71,15 @@ struct ReviewCommitSheet: View {
                 .background(.white)
                 .overlay(Rectangle().stroke(GTTheme.ink, lineWidth: 1.5))
                 .frame(minHeight: 160, maxHeight: 260)
+
+                if let ignoreNotice {
+                    Text(ignoreNotice)
+                        .font(.callout.weight(.semibold))
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(GTTheme.yellow.opacity(0.65))
+                        .overlay(Rectangle().stroke(GTTheme.ink, lineWidth: 1.5))
+                }
 
                 Text("Checkpoint message")
                     .font(.system(size: 11, weight: .black, design: .monospaced))
@@ -111,12 +129,34 @@ struct ReviewCommitSheet: View {
             do {
                 savedCommit = try await library.saveCheckpoint(
                     paths: Array(selectedPaths),
+                    stopTrackingPaths: Array(stopTrackingPaths),
                     message: message
                 )
             } catch {
                 errorMessage = error.localizedDescription
             }
             isSaving = false
+        }
+    }
+
+    private func ignore(_ change: GitChange) {
+        Task {
+            do {
+                let result = try await library.ignoreFile(path: change.path)
+                ignoredPaths.insert(change.path)
+                if result.wasTracked {
+                    stopTrackingPaths.insert(change.path)
+                    selectedPaths.insert(change.path)
+                    selectedPaths.insert(".gitignore")
+                    ignoreNotice = "\(change.path) will stay on your Mac and be removed from Git when you save this checkpoint."
+                } else {
+                    selectedPaths.remove(change.path)
+                    selectedPaths.insert(".gitignore")
+                    ignoreNotice = "\(change.path) will stay on your Mac and is now excluded from future checkpoints."
+                }
+            } catch {
+                errorMessage = error.localizedDescription
+            }
         }
     }
 }
