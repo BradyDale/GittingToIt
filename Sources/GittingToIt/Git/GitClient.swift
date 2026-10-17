@@ -105,12 +105,12 @@ struct GitClient: Sendable {
     }
 
     func fileHistory(in root: URL, relativePath: String) throws -> [CommitSummary] {
-        let format = "%H%x1f%h%x1f%aI%x1f%an%x1f%s%x1e"
+        let format = "%x1e%H%x1f%h%x1f%aI%x1f%an%x1f%s"
         let output = try run([
-            "-C", root.path, "log", "--follow", "--date=iso-strict",
+            "-C", root.path, "log", "--follow", "--name-status", "--find-renames", "--date=iso-strict",
             "--pretty=format:\(format)", "--", relativePath
-        ], allowEmptyRepository: true)
-        return parseCommits(output)
+        ], trimOutput: false, allowEmptyRepository: true)
+        return parseFileHistory(output, startingAt: relativePath)
     }
 
     func filesChanged(in root: URL, commit: String) throws -> [GitChange] {
@@ -128,10 +128,34 @@ struct GitClient: Sendable {
         try run(["-C", root.path, "show", "\(commit):\(relativePath)"], trimOutput: false)
     }
 
-    func wordDiffFromWorkingFile(in root: URL, relativePath: String, from commit: String) throws -> String {
-        let raw = try run([
-            "-C", root.path, "diff", "--word-diff=plain", "--no-color", commit, "--", relativePath
-        ], trimOutput: false)
+    func wordDiffFromWorkingFile(
+        in root: URL,
+        relativePath: String,
+        historicalPath: String? = nil,
+        from commit: String
+    ) throws -> String {
+        let sourcePath = historicalPath ?? relativePath
+        let historicalData = try fileData(in: root, relativePath: sourcePath, at: commit)
+        let temporaryFolder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("GittingToIt-Diff-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: temporaryFolder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryFolder) }
+
+        let historicalFile = temporaryFolder.appendingPathComponent(URL(fileURLWithPath: sourcePath).lastPathComponent)
+        try historicalData.write(to: historicalFile)
+        let arguments = [
+            "-C", root.path, "diff", "--no-index", "--word-diff=plain", "--no-color", "--",
+            historicalFile.path, root.appendingPathComponent(relativePath).path
+        ]
+        let result = try execute(arguments)
+        guard result.status == 0 || result.status == 1 else {
+            throw GitClientError.commandFailed(
+                arguments: arguments,
+                message: String(decoding: result.error, as: UTF8.self)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            )
+        }
+        let raw = String(decoding: result.output, as: UTF8.self)
         return raw.split(separator: "\n", omittingEmptySubsequences: false)
             .map(String.init)
             .filter { line in
@@ -227,7 +251,7 @@ struct GitClient: Sendable {
 
         let historicalData = try fileData(
             in: rootURL,
-            relativePath: relativePath,
+            relativePath: sourceCommit.historicalPath ?? relativePath,
             at: sourceCommit.hash
         )
         try historicalData.write(to: destination, options: .atomic)
@@ -378,6 +402,40 @@ struct GitClient: Sendable {
                 message: fields[4]
             )
         }
+    }
+
+    /// `git log --follow` finds commits across renames, but later blob lookups also need the
+    /// filename that existed at each commit. Walk newest-to-oldest and carry the old side of
+    /// every rename into the records that precede it.
+    private func parseFileHistory(_ output: String, startingAt relativePath: String) -> [CommitSummary] {
+        var pathAtCommit = relativePath
+        var commits: [CommitSummary] = []
+
+        for rawRecord in output.split(separator: "\u{1e}", omittingEmptySubsequences: true) {
+            let lines = rawRecord.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
+            guard let metadata = lines.first else { continue }
+            let fields = metadata.split(separator: "\u{1f}", omittingEmptySubsequences: false).map(String.init)
+            guard fields.count >= 5 else { continue }
+
+            commits.append(CommitSummary(
+                hash: fields[0],
+                shortHash: fields[1],
+                date: Self.isoDate(fields[2]),
+                author: fields[3],
+                message: fields[4],
+                historicalPath: pathAtCommit
+            ))
+
+            for change in lines.dropFirst() {
+                let parts = change.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+                guard parts.count >= 3,
+                      parts[0].hasPrefix("R"),
+                      parts[2] == pathAtCommit else { continue }
+                pathAtCommit = parts[1]
+                break
+            }
+        }
+        return commits
     }
 
     private static func isoDate(_ text: String) -> Date? {

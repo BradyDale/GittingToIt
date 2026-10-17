@@ -356,6 +356,88 @@ struct GitClientCommitTests {
         #expect(diff.contains("{+loud.+}"))
     }
 
+    @Test func fileHistoryPreviewsAndDiffsVersionsFromBeforeARename() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let git = GitClient()
+        try git.initializeRepository(at: root)
+        _ = try git.run(["-C", root.path, "config", "user.name", "Test Writer"])
+        _ = try git.run(["-C", root.path, "config", "user.email", "writer@example.invalid"])
+        try "The old opening.".write(
+            to: root.appendingPathComponent("First Draft.md"), atomically: true, encoding: .utf8
+        )
+        _ = try git.run(["-C", root.path, "add", "."])
+        _ = try git.run(["-C", root.path, "commit", "--no-gpg-sign", "-m", "Old title"])
+        let oldHash = try git.run(["-C", root.path, "rev-parse", "HEAD"])
+
+        _ = try git.run(["-C", root.path, "mv", "First Draft.md", "ONE.md"])
+        _ = try git.run(["-C", root.path, "commit", "--no-gpg-sign", "-m", "Rename the chapter"])
+        try "The new opening.".write(
+            to: root.appendingPathComponent("ONE.md"), atomically: true, encoding: .utf8
+        )
+
+        let history = try git.fileHistory(in: root, relativePath: "ONE.md")
+        let rename = try #require(history.first { $0.message == "Rename the chapter" })
+        let oldVersion = try #require(history.first { $0.hash == oldHash })
+
+        #expect(rename.historicalPath == "ONE.md")
+        #expect(oldVersion.historicalPath == "First Draft.md")
+        #expect(try git.text(
+            in: root,
+            relativePath: try #require(oldVersion.historicalPath),
+            at: oldVersion.hash
+        ) == "The old opening.")
+
+        let diff = try git.wordDiffFromWorkingFile(
+            in: root,
+            relativePath: "ONE.md",
+            historicalPath: oldVersion.historicalPath,
+            from: oldVersion.hash
+        )
+        #expect(diff.contains("[-old-]"))
+        #expect(diff.contains("{+new+}"))
+    }
+
+    @Test func restoreFromBeforeRenameWritesToTheCurrentFilename() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let git = GitClient()
+        try git.initializeRepository(at: root)
+        _ = try git.run(["-C", root.path, "config", "user.name", "Test Writer"])
+        _ = try git.run(["-C", root.path, "config", "user.email", "writer@example.invalid"])
+        try "Original words".write(
+            to: root.appendingPathComponent("Old Name.md"), atomically: true, encoding: .utf8
+        )
+        _ = try git.run(["-C", root.path, "add", "."])
+        _ = try git.run(["-C", root.path, "commit", "--no-gpg-sign", "-m", "Original"])
+        _ = try git.run(["-C", root.path, "mv", "Old Name.md", "Current Name.md"])
+        _ = try git.run(["-C", root.path, "commit", "--no-gpg-sign", "-m", "Rename"])
+        try "Current words".write(
+            to: root.appendingPathComponent("Current Name.md"), atomically: true, encoding: .utf8
+        )
+
+        let source = try #require(
+            git.fileHistory(in: root, relativePath: "Current Name.md").first { $0.message == "Original" }
+        )
+        _ = try git.restoreFile(
+            in: root,
+            relativePath: "Current Name.md",
+            from: source,
+            note: "Recover the original opening."
+        )
+
+        #expect(try String(
+            contentsOf: root.appendingPathComponent("Current Name.md"), encoding: .utf8
+        ) == "Original words")
+        #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("Old Name.md").path))
+    }
+
     @Test func statusPreservesSpacesAndUsesNewNameForRenames() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

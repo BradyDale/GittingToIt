@@ -13,6 +13,7 @@ struct FileHistoryView: View {
     @State private var detailMode = DetailMode.version
     @State private var detailText = "Select a checkpoint to inspect this file."
     @State private var isLoadingDetail = false
+    @State private var detailTask: Task<Void, Never>?
 
     private enum DetailMode: String, CaseIterable, Identifiable {
         case version = "This version"
@@ -94,6 +95,7 @@ struct FileHistoryView: View {
         }
         .onChange(of: selectedCommitID) { _, _ in loadDetail() }
         .onChange(of: detailMode) { _, _ in loadDetail() }
+        .onDisappear { detailTask?.cancel() }
         .sheet(isPresented: $showingRestore) {
             if let id = selectedCommitID,
                let commit = commits.first(where: { $0.id == id }) {
@@ -104,9 +106,11 @@ struct FileHistoryView: View {
     }
 
     private func loadDetail() {
+        detailTask?.cancel()
         guard documentSupportsTextPreview,
               let id = selectedCommitID,
               let commit = commits.first(where: { $0.id == id }) else {
+            isLoadingDetail = false
             detailText = documentSupportsTextPreview
                 ? "Select a checkpoint to inspect this file."
                 : "Text preview is not available for .\(document.fileExtension) files. The complete file version can still be restored."
@@ -114,18 +118,25 @@ struct FileHistoryView: View {
         }
 
         isLoadingDetail = true
-        Task {
+        let requestedID = commit.id
+        let requestedMode = detailMode
+        detailTask = Task {
+            let loadedText: String
             do {
-                switch detailMode {
+                switch requestedMode {
                 case .version:
-                    detailText = try await library.historicalText(for: document, at: commit)
+                    loadedText = try await library.historicalText(for: document, at: commit)
                 case .changes:
                     let diff = try await library.wordDiffToCurrent(for: document, from: commit)
-                    detailText = diff.isEmpty ? "No differences from the current file." : diff
+                    loadedText = diff.isEmpty ? "No differences from the current file." : diff
                 }
             } catch {
-                detailText = "Preview unavailable: \(error.localizedDescription)"
+                loadedText = "Preview unavailable: \(error.localizedDescription)"
             }
+            guard !Task.isCancelled,
+                  selectedCommitID == requestedID,
+                  detailMode == requestedMode else { return }
+            detailText = loadedText
             isLoadingDetail = false
         }
     }

@@ -10,6 +10,7 @@ final class RepositoryLibrary: ObservableObject {
     @Published var errorMessage: String?
 
     private let git = GitClient()
+    private var historyCache: [String: [CommitSummary]] = [:]
 
     init() {
         loadCatalog()
@@ -86,6 +87,7 @@ final class RepositoryLibrary: ObservableObject {
 
     func refreshSelected() {
         guard let repository = selectedRepository else { return }
+        historyCache = historyCache.filter { !$0.key.hasPrefix(repository.id.uuidString + "\u{0}") }
         isLoading = true
         errorMessage = nil
         Task {
@@ -103,9 +105,13 @@ final class RepositoryLibrary: ObservableObject {
 
     func history(for document: WritingDocument) async throws -> [CommitSummary] {
         guard let repository = selectedRepository else { return [] }
-        return try await Task.detached {
+        let cacheKey = repository.id.uuidString + "\u{0}" + document.relativePath
+        if let cached = historyCache[cacheKey] { return cached }
+        let history = try await Task.detached {
             try GitClient().fileHistory(in: repository.folderURL, relativePath: document.relativePath)
         }.value
+        historyCache[cacheKey] = history
+        return history
     }
 
     func changedFiles(for commit: CommitSummary) async throws -> [GitChange] {
@@ -120,7 +126,7 @@ final class RepositoryLibrary: ObservableObject {
         return try await Task.detached {
             try GitClient().text(
                 in: repository.folderURL,
-                relativePath: document.relativePath,
+                relativePath: commit.historicalPath ?? document.relativePath,
                 at: commit.hash
             )
         }.value
@@ -132,6 +138,7 @@ final class RepositoryLibrary: ObservableObject {
             try GitClient().wordDiffFromWorkingFile(
                 in: repository.folderURL,
                 relativePath: document.relativePath,
+                historicalPath: commit.historicalPath,
                 from: commit.hash
             )
         }.value

@@ -30,7 +30,24 @@ struct CommitSummary: Hashable, Identifiable, Sendable {
     let date: Date?
     let author: String
     let message: String
+    let historicalPath: String?
     var id: String { hash }
+
+    init(
+        hash: String,
+        shortHash: String,
+        date: Date?,
+        author: String,
+        message: String,
+        historicalPath: String? = nil
+    ) {
+        self.hash = hash
+        self.shortHash = shortHash
+        self.date = date
+        self.author = author
+        self.message = message
+        self.historicalPath = historicalPath
+    }
 }
 
 struct WritingDocument: Hashable, Identifiable, Sendable {
