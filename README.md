@@ -4,6 +4,10 @@ GittingToIt is a local, writing-focused Git client for understanding what change
 
 This repository contains **application source code only**. It must never contain the user's writing, repository catalog, absolute folder paths, File Notes, Git history exports, credentials, or other private data.
 
+![GittingToIt showing the history of a fictional manuscript](docs/images/gittingtoit-file-history.jpg)
+
+_The screenshot uses a disposable fictional repository; it contains no personal files or real writing._
+
 ## Current checkpoint
 
 The native macOS prototype includes:
@@ -24,6 +28,7 @@ The native macOS prototype includes:
 - Automatic family-history notes whenever a known original or copy is checkpointed
 - A bold, high-contrast visual system inspired by the supplied mood board
 - Selective checkpoints that cannot include unrelated staged work
+- Per-file and grouped ignore controls, including convenient rules for Finder metadata and image-heavy folders
 - Safe one-file restoration with an automatic safety checkpoint for current edits
 
 Compare/reconcile and richer text-diff views remain planned work.
