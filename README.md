@@ -1,5 +1,10 @@
 # GittingToIt
 
+**Version control for writers.**
+
+- Three years ago, you made three different versions of the same essay. Now you want to try to get it published, but you can't remember how they differ.
+- **GittingToIt** is for that.
+
 GittingToIt is a local, writing-focused Git client for understanding what changed, when it changed, and why alternate copies exist.
 
 This repository contains **application source code only**. It must never contain the user's writing, repository catalog, absolute folder paths, File Notes, Git history exports, credentials, or other private data.
@@ -7,6 +12,13 @@ This repository contains **application source code only**. It must never contain
 ![GittingToIt showing the history of a fictional manuscript](docs/images/gittingtoit-file-history.jpg)
 
 _The screenshot uses a disposable fictional repository; it contains no personal files or real writing._
+
+## Best practices
+
+- Keep large groups of interconnected writing in one large folder that will be managed by this client. You don't need a tab for every piece of writing. You can have sub-folders in the large folder separating each piece of writing, however.
+- After every writing session, open GittingToIt, go to the folder that holds your newly edited writing and close the day by hitting "Review and Commit," note the new piece of writing or which file changed, write as much or as little as you want about what you did and then finalize it.
+- **If you want to make a new version** of a file, make the copy from within GittingToIt. This will force you to log why you are making the copy. This is "forking for writers." By logging what you're doing, you will be more likely to be able to know which file to use in the future.
+- If you keep images or other multimedia in the same folders as your writing, select "Ignore" on those files in the dialogue when making a commit (unless you modify these files a lot, you'll just be burning Git repository storage by tracking them).
 
 ## Current checkpoint
 
@@ -26,7 +38,7 @@ The native macOS prototype includes:
 - Documented related copies named `filename c YYYYMMDD.ext`
 - Required purpose notes for copies
 - Automatic family-history notes whenever a known original or copy is checkpointed
-- A bold, high-contrast visual system inspired by the supplied mood board
+- A bold, high-contrast visual system
 - Selective checkpoints that cannot include unrelated staged work
 - Per-file and grouped ignore controls, including convenient rules for Finder metadata and image-heavy folders
 - Safe one-file restoration with an automatic safety checkpoint for current edits
@@ -70,3 +82,7 @@ open .build/GittingToIt.app
 - File Notes live beside the documented writing because they belong to that writing repository, not this application repository.
 
 See [PRIVACY.md](PRIVACY.md) and [SECURITY.md](SECURITY.md) before publishing.
+
+## License
+
+GittingToIt is open-source software available under the [MIT License](LICENSE). Use it, modify it, and share it however you like under those terms.
