@@ -17,6 +17,7 @@ _The screenshot uses a disposable fictional repository; it contains no personal 
 
 - Keep large groups of interconnected writing in one large folder that will be managed by this client. You don't need a tab for every piece of writing. You can have sub-folders in the large folder separating each piece of writing, however.
 - After every writing session, open GittingToIt, go to the folder that holds your newly edited writing and close the day by hitting "Review and Commit," note the new piece of writing or which file changed, write as much or as little as you want about what you did and then finalize it.
+- GittingToIt provides a diary for every file. This is a separate notes file associated with a piece of writing, allowing you to document changes without putting those notes inside the writing itself. It is a good place to log changes, particularly for files edited over a long period of time, and is especially important when you have multiple versions of the same piece of writing.
 - **If you want to make a new version** of a file, make the copy from within GittingToIt. This will force you to log why you are making the copy. This is "forking for writers." By logging what you're doing, you will be more likely to be able to know which file to use in the future.
 - If you keep images or other multimedia in the same folders as your writing, select "Ignore" on those files in the dialogue when making a commit (unless you modify these files a lot, you'll just be burning Git repository storage by tracking them).
 
