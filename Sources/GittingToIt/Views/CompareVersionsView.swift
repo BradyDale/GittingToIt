@@ -49,10 +49,10 @@ struct CompareVersionsView: View {
             }
 
             HStack {
-                Picker("Earlier", selection: $earlierPath) {
+                Picker("Most recent / revised", selection: $laterPath) {
                     ForEach(documents) { Text($0.name).tag($0.relativePath) }
                 }
-                Picker("Later", selection: $laterPath) {
+                Picker("Compared against", selection: $earlierPath) {
                     ForEach(documents) { Text($0.name).tag($0.relativePath) }
                 }
                 Button("Compare") { loadComparison() }
@@ -61,11 +61,18 @@ struct CompareVersionsView: View {
             }
 
             HStack {
-                Picker("", selection: $mode) {
-                    ForEach(Mode.allCases) { Text($0.rawValue).tag($0) }
+                ForEach(Mode.allCases) { option in
+                    Button(option.rawValue) { mode = option }
+                        .buttonStyle(.plain)
+                        .font(.callout.weight(.semibold))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 7)
+                        .background(mode == option ? GTTheme.yellow : .white)
+                        .overlay(Rectangle().stroke(GTTheme.ink, lineWidth: 1.25))
                 }
-                .pickerStyle(.segmented)
-                .frame(maxWidth: 420)
+                Text("Showing: \(mode.rawValue)")
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
                 Spacer()
                 Button("Previous Change") { selectedChange = max(0, selectedChange - 1) }
                     .disabled(mode != .markedUp || selectedChange <= 0)
@@ -81,6 +88,7 @@ struct CompareVersionsView: View {
                 ContentUnavailableView("Comparison unavailable", systemImage: "exclamationmark.triangle", description: Text(errorMessage))
             } else {
                 WriterDiffTextView(text: displayedText, markedUp: mode == .markedUp, selectedChange: selectedChange)
+                    .id(mode)
                     .overlay(Rectangle().stroke(GTTheme.ink, lineWidth: 1.5))
             }
         }
@@ -92,13 +100,19 @@ struct CompareVersionsView: View {
                 errorMessage = "Compare Versions currently needs two Markdown or plain-text files in this version set."
                 return
             }
-            earlierPath = startingDocument.relativePath
-            if !documents.contains(where: { $0.relativePath == earlierPath }) {
-                earlierPath = documents[0].relativePath
+            let mostRecentFirst = documents.sorted {
+                ($0.modifiedAt ?? .distantPast) > ($1.modifiedAt ?? .distantPast)
             }
-            laterPath = family.canonicalPath ?? documents.first(where: { $0.relativePath != earlierPath })?.relativePath ?? ""
-            if earlierPath == laterPath {
-                laterPath = documents.first(where: { $0.relativePath != earlierPath })?.relativePath ?? ""
+            if documents.count == 2 {
+                laterPath = mostRecentFirst[0].relativePath
+                earlierPath = mostRecentFirst[1].relativePath
+            } else {
+                laterPath = documents.contains(where: { $0.relativePath == startingDocument.relativePath })
+                    ? startingDocument.relativePath : mostRecentFirst[0].relativePath
+                earlierPath = family.canonicalPath ?? mostRecentFirst.first(where: { $0.relativePath != laterPath })?.relativePath ?? ""
+                if earlierPath == laterPath {
+                    earlierPath = mostRecentFirst.first(where: { $0.relativePath != laterPath })?.relativePath ?? ""
+                }
             }
             loadComparison()
         }

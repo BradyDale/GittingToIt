@@ -8,6 +8,16 @@ struct SelectVersionsSheet: View {
 
     @State private var selectedPaths: Set<String> = []
     @State private var errorMessage: String?
+    @State private var search = ""
+
+    private var filteredDocuments: [WritingDocument] {
+        let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return documents }
+        return documents.filter {
+            $0.name.localizedCaseInsensitiveContains(query) ||
+            $0.relativePath.localizedCaseInsensitiveContains(query)
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -16,7 +26,17 @@ struct SelectVersionsSheet: View {
             Text("Choose every file that represents a version of the same piece of writing.")
                 .foregroundStyle(.secondary)
 
-            List(documents) { document in
+            TextField("Search filenames or folders", text: $search)
+                .textFieldStyle(.plain)
+                .padding(10)
+                .background(.white)
+                .overlay(Rectangle().stroke(GTTheme.ink, lineWidth: 1.5))
+
+            Text("\(selectedPaths.count) selected • \(filteredDocuments.count) shown")
+                .font(.caption.monospaced())
+                .foregroundStyle(.secondary)
+
+            List(filteredDocuments) { document in
                 Toggle(isOn: Binding(
                     get: { selectedPaths.contains(document.relativePath) },
                     set: { selected in

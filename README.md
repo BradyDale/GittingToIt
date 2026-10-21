@@ -29,10 +29,10 @@ GittingToIt organizes related drafts into **version sets**.
 
 From the **Versioning** menu, you can:
 
-- **Select Versions** to designate multiple existing files as versions of the same piece of writing.
+- **Select Versions** to search for and designate multiple existing files as versions of the same piece of writing.
 - **View Versions** to temporarily filter the file list to that version set.
 - **Review Versioning Documentation** to read the notes from every version as one continuous, chronological record.
-- **Compare Versions** to read two Markdown or plain-text drafts in a single writer-friendly view, switch between the earlier and later text, and move through additions and deletions.
+- **Compare Versions** to choose any two Markdown or plain-text drafts from the set, read them in a single writer-friendly view, switch between the earlier and later text, and move through additions and deletions. When a set contains exactly two versions, both are selected automatically with the most recently edited file on the left.
 - **Make Canonical** to identify the file currently considered the master copy. Canonical files are highlighted in the file list.
 - **Remove Version** to remove a file from its version set without deleting the file.
 
