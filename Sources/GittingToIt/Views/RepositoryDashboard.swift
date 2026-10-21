@@ -77,7 +77,7 @@ struct RepositoryDashboard: View {
                 Button("Make Related Copy") { showingCopySheet = true }
                     .buttonStyle(GTActionButtonStyle(color: GTTheme.mint))
                     .disabled(selectedDocument == nil)
-                Button("Edit Notes") { showingNotes = true }
+                Button("Make Note") { showingNotes = true }
                     .buttonStyle(GTActionButtonStyle())
                     .disabled(selectedDocument == nil)
             }

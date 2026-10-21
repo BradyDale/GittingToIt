@@ -11,6 +11,7 @@ struct FileHistoryView: View {
     @State private var selectedCommitID: CommitSummary.ID?
     @State private var showingRestore = false
     @State private var showingFork = false
+    @State private var showingNotes = false
     @State private var detailMode = DetailMode.version
     @State private var detailText = "Select a checkpoint to inspect this file."
     @State private var isLoadingDetail = false
@@ -31,6 +32,8 @@ struct FileHistoryView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
+                Button("Make Note") { showingNotes = true }
+                    .buttonStyle(GTActionButtonStyle())
                 Button("Fork This Version") { showingFork = true }
                     .buttonStyle(GTActionButtonStyle(color: GTTheme.mint))
                     .disabled(selectedCommitID == nil)
@@ -113,6 +116,10 @@ struct FileHistoryView: View {
                 HistoricalForkSheet(document: document, commit: commit)
                     .environmentObject(library)
             }
+        }
+        .sheet(isPresented: $showingNotes) {
+            FileNotesView(document: document)
+                .environmentObject(library)
         }
     }
 
