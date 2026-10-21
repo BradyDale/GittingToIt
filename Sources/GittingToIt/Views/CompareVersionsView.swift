@@ -23,7 +23,7 @@ struct CompareVersionsView: View {
     }
 
     private var documents: [WritingDocument] {
-        library.documents(in: family).filter { ["md", "markdown", "txt"].contains($0.fileExtension) }
+        library.documents(in: family).filter { DocumentTextExtractor.supportedExtensions.contains($0.fileExtension) }
     }
     private var displayedText: String {
         guard let comparison else { return "Choose two versions to compare." }
@@ -97,7 +97,7 @@ struct CompareVersionsView: View {
         .frame(minWidth: 950, minHeight: 700)
         .onAppear {
             guard documents.count >= 2 else {
-                errorMessage = "Compare Versions currently needs two Markdown or plain-text files in this version set."
+                errorMessage = "Compare Versions needs two supported writing files in this version set. Supported formats include Markdown, text, RTF, HTML, Word, and OpenDocument."
                 return
             }
             let mostRecentFirst = documents.sorted {

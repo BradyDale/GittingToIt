@@ -18,7 +18,7 @@ _The screenshot uses a disposable fictional repository; it contains no personal 
 - Keep large groups of interconnected writing in one large folder that will be managed by this client. You don't need a tab for every piece of writing. You can have sub-folders in the large folder separating each piece of writing, however.
 - After every writing session, open GittingToIt, go to the folder that holds your newly edited writing and close the day by hitting "Review and Commit," note the new piece of writing or which file changed, write as much or as little as you want about what you did and then finalize it.
 - GittingToIt provides a diary for every file. This is a separate notes file associated with a piece of writing, allowing you to document changes without putting those notes inside the writing itself. It is a good place to log changes, particularly for files edited over a long period of time, and is especially important when you have multiple versions of the same piece of writing.
-- GittingToIt currently works best with Markdown (`.md`) and plain-text (`.txt`) files, especially when comparing versions. We recommend [Typora](https://typora.io/), a beautiful Markdown editor that keeps the formatting out of your way while you write.
+- GittingToIt currently works best with Markdown (`.md`) and plain-text (`.txt`) files. Version comparison also supports RTF, HTML, Microsoft Word (`.doc` and `.docx`), and LibreOffice/OpenOffice (`.odt` and `.fodt`) files by extracting their readable text. We recommend [Typora](https://typora.io/), a beautiful Markdown editor that keeps the formatting out of your way while you write.
 - **If you want to make a new version** of a file, make the copy from within GittingToIt. This will force you to log why you are making the copy. This is "forking for writers." By logging what you're doing, you will be more likely to be able to know which file to use in the future.
 - If you keep images or other multimedia in the same folders as your writing, select "Ignore" on those files in the dialogue when making a commit (unless you modify these files a lot, you'll just be burning Git repository storage by tracking them).
 
@@ -33,7 +33,7 @@ From the **Versioning** menu, you can:
 - **Select Versions** to search for and designate multiple existing files as versions of the same piece of writing.
 - **View Versions** to temporarily filter the file list to that version set.
 - **Review Versioning Documentation** to read the notes from every version as one continuous, chronological record.
-- **Compare Versions** to choose any two Markdown or plain-text drafts from the set, read them in a single writer-friendly view, switch between the earlier and later text, and move through additions and deletions. When a set contains exactly two versions, both are selected automatically with the most recently edited file on the left.
+- **Compare Versions** to choose any two supported drafts from the set, read them in a single writer-friendly view, switch between the earlier and later text, and move through additions and deletions. Supported formats include Markdown, plain text, RTF, HTML, Microsoft Word, and OpenDocument. When a set contains exactly two versions, both are selected automatically with the most recently edited file on the left.
 - **Make Canonical** to identify the file currently considered the master copy. Canonical files are highlighted in the file list.
 - **Remove Version** to remove a file from its version set without deleting the file.
 

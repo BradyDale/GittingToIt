@@ -26,7 +26,8 @@ enum GitClientError: LocalizedError {
 
 struct GitClient: Sendable {
     private static let supportedWritingExtensions: Set<String> = [
-        "md", "markdown", "txt", "rtf", "doc", "docx", "pdf"
+        "md", "markdown", "txt", "rtf", "doc", "docx", "pdf",
+        "html", "htm", "xhtml", "odt", "fodt"
     ]
 
     func repositoryRoot(for folder: URL) throws -> URL {
@@ -182,6 +183,23 @@ struct GitClient: Sendable {
                 message: String(decoding: result.error, as: UTF8.self)
                     .trimmingCharacters(in: .whitespacesAndNewlines)
             )
+        }
+        return cleanedWordDiff(String(decoding: result.output, as: UTF8.self))
+    }
+
+    func wordDiffBetweenTexts(earlier: String, later: String) throws -> String {
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("GittingToIt-Text-Diff-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let earlierURL = folder.appendingPathComponent("Earlier.txt")
+        let laterURL = folder.appendingPathComponent("Later.txt")
+        try earlier.write(to: earlierURL, atomically: true, encoding: .utf8)
+        try later.write(to: laterURL, atomically: true, encoding: .utf8)
+        let arguments = ["diff", "--no-index", "--word-diff=plain", "--no-color", "--", earlierURL.path, laterURL.path]
+        let result = try execute(arguments)
+        guard result.status == 0 || result.status == 1 else {
+            throw GitClientError.commandFailed(arguments: arguments, message: String(decoding: result.error, as: UTF8.self))
         }
         return cleanedWordDiff(String(decoding: result.output, as: UTF8.self))
     }

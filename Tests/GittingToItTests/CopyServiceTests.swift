@@ -3,6 +3,54 @@ import Testing
 @testable import GittingToIt
 
 struct CopyServiceTests {
+    @Test func extractsReadableTextFromRTFAndHTML() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let rtf = root.appendingPathComponent("Draft.rtf")
+        let html = root.appendingPathComponent("Draft.html")
+        try "{\\rtf1\\ansi The \\b bright\\b0 river.}"
+            .write(to: rtf, atomically: true, encoding: .utf8)
+        try "<html><body><p>The quiet river.</p></body></html>".write(to: html, atomically: true, encoding: .utf8)
+
+        let rtfText = try DocumentTextExtractor.text(from: rtf)
+        #expect(rtfText.contains("The"))
+        #expect(rtfText.contains("bright"))
+        #expect(rtfText.contains("river"))
+        #expect(try DocumentTextExtractor.text(from: html).contains("The quiet river."))
+    }
+
+    @Test func extractsReadableTextFromWordAndOpenDocumentFiles() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("Source.txt")
+        try "The winter river changed.".write(to: source, atomically: true, encoding: .utf8)
+
+        for format in ["doc", "docx", "odt"] {
+            let destination = root.appendingPathComponent("Draft.\(format)")
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/textutil")
+            process.arguments = ["-convert", format, "-output", destination.path, source.path]
+            try process.run()
+            process.waitUntilExit()
+            #expect(process.terminationStatus == 0)
+            #expect(try DocumentTextExtractor.text(from: destination).contains("The winter river changed."))
+        }
+
+        let fodt = root.appendingPathComponent("Draft.fodt")
+        try """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <office:document xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+          <office:body><office:text><text:p>The open river changed.</text:p></office:text></office:body>
+        </office:document>
+        """.write(to: fodt, atomically: true, encoding: .utf8)
+        #expect(try DocumentTextExtractor.text(from: fodt).contains("The open river changed."))
+    }
+
     @Test func versionFamiliesMergeAndTrackCanonicalDocument() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

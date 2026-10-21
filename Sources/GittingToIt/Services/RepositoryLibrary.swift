@@ -280,13 +280,9 @@ final class RepositoryLibrary: ObservableObject {
             let root = repository.folderURL
             let earlierURL = root.appendingPathComponent(earlier.relativePath)
             let laterURL = root.appendingPathComponent(later.relativePath)
-            let earlierText = try String(contentsOf: earlierURL, encoding: .utf8)
-            let laterText = try String(contentsOf: laterURL, encoding: .utf8)
-            let markedUp = try GitClient().wordDiffBetweenWorkingFiles(
-                in: root,
-                earlierPath: earlier.relativePath,
-                laterPath: later.relativePath
-            )
+            let earlierText = try DocumentTextExtractor.text(from: earlierURL)
+            let laterText = try DocumentTextExtractor.text(from: laterURL)
+            let markedUp = try GitClient().wordDiffBetweenTexts(earlier: earlierText, later: laterText)
             return VersionComparison(earlierText: earlierText, laterText: laterText, markedUpText: markedUp)
         }.value
     }
