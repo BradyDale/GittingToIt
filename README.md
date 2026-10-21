@@ -38,6 +38,7 @@ The native macOS prototype includes:
 - Exact historical text preview and word-focused comparison with the current file
 - A dated, editable notes diary stored in human-readable `GittingToIt Notes.md`
 - Documented related copies named `filename c YYYYMMDD.ext`
+- Version sets that keep related drafts together, identify the canonical copy, and combine their notes into one timeline
 - Documented forks made from any historical version without replacing the current file
 - Required purpose notes for copies
 - Automatic family-history notes whenever a known original or copy is checkpointed

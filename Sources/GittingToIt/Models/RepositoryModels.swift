@@ -87,3 +87,13 @@ struct FileRestoreResult: Sendable {
     let sourceCommit: CommitSummary
     let safetyCommit: CommitSummary?
 }
+
+enum VersioningAction: String, Identifiable, Sendable {
+    case selectVersions
+    case viewVersions
+    case reviewDocumentation
+    case makeCanonical
+    case removeVersion
+
+    var id: String { rawValue }
+}

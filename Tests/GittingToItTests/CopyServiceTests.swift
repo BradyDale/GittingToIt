@@ -3,6 +3,25 @@ import Testing
 @testable import GittingToIt
 
 struct CopyServiceTests {
+    @Test func versionFamiliesMergeAndTrackCanonicalDocument() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let service = VersioningService()
+        _ = try service.associate(repositoryRoot: root, paths: ["Draft.md", "Draft c 20261021.md"])
+        _ = try service.associate(repositoryRoot: root, paths: ["Draft c 20261021.md", "Draft Final.md"])
+        try service.makeCanonical(repositoryRoot: root, relativePath: "Draft Final.md")
+
+        let family = try #require(service.family(repositoryRoot: root, containing: "Draft.md"))
+        #expect(family.members.count == 3)
+        #expect(family.canonicalPath == "Draft Final.md")
+
+        try service.remove(repositoryRoot: root, relativePath: "Draft c 20261021.md")
+        #expect(service.family(repositoryRoot: root, containing: "Draft.md")?.members.count == 2)
+    }
+
     @Test func copyUsesCreationDateAndWritesHumanReadableNotes() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

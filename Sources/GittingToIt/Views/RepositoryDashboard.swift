@@ -12,6 +12,9 @@ struct RepositoryDashboard: View {
     @State private var showingCommitSheet = false
     @State private var showingFileHistory = false
     @State private var showingNotes = false
+    @State private var showingVersionSelection = false
+    @State private var showingVersionDocumentation = false
+    @State private var versionFamilyFilter: VersionFamily?
     @State private var documentSearch = ""
     @State private var historySearch = ""
 
@@ -48,13 +51,23 @@ struct RepositoryDashboard: View {
             .gtPanel(GTTheme.repositoryColor(for: repository.id))
 
             HStack(alignment: .firstTextBaseline) {
-                Text("FILES")
+                Text(versionFamilyFilter == nil ? "FILES" : "VERSIONS")
                     .font(.system(size: 24, weight: .black, design: .rounded))
                 Spacer()
                 Text("\(snapshot.documents.count) WRITING DOCUMENTS")
                     .font(.system(size: 10, weight: .bold, design: .monospaced))
                     .tracking(1.2)
                     .foregroundStyle(GTTheme.gray)
+            }
+
+            if let family = versionFamilyFilter {
+                HStack {
+                    Text("Showing \(family.members.count) related versions")
+                        .font(.caption.weight(.semibold))
+                    Spacer()
+                    Button("Show All Files") { versionFamilyFilter = nil }
+                        .buttonStyle(.link)
+                }
             }
 
             TextField("Find a document", text: $documentSearch)
@@ -64,8 +77,12 @@ struct RepositoryDashboard: View {
                 .overlay(Rectangle().stroke(GTTheme.ink, lineWidth: 1.5))
 
             List(filteredDocuments, selection: $selectedDocument) { document in
-                DocumentRow(document: document)
+                DocumentRow(
+                    document: document,
+                    isCanonical: library.versionFamily(for: document)?.canonicalPath == document.relativePath
+                )
                     .tag(document)
+                    .contextMenu { documentContextMenu(document) }
             }
             .listStyle(.inset)
             .frame(minHeight: 320)
@@ -104,6 +121,24 @@ struct RepositoryDashboard: View {
                 FileNotesView(document: selectedDocument)
                     .environmentObject(library)
             }
+        }
+        .sheet(isPresented: $showingVersionSelection) {
+            if let selectedDocument {
+                SelectVersionsSheet(startingDocument: selectedDocument, documents: snapshot.documents)
+                    .environmentObject(library)
+            }
+        }
+        .sheet(isPresented: $showingVersionDocumentation) {
+            if let selectedDocument {
+                VersionDocumentationView(document: selectedDocument)
+                    .environmentObject(library)
+            }
+        }
+        .onChange(of: selectedDocument) { _, document in library.activeDocument = document }
+        .onChange(of: library.requestedVersioningAction) { _, action in
+            guard let action else { return }
+            handleVersioningAction(action)
+            library.requestedVersioningAction = nil
         }
     }
 
@@ -175,10 +210,74 @@ struct RepositoryDashboard: View {
     }
 
     private var filteredDocuments: [WritingDocument] {
+        let baseDocuments: [WritingDocument]
+        if let family = versionFamilyFilter {
+            let paths = Set(family.members)
+            baseDocuments = snapshot.documents.filter { paths.contains($0.relativePath) }
+        } else {
+            baseDocuments = snapshot.documents
+        }
         let query = documentSearch.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return snapshot.documents }
-        return snapshot.documents.filter {
+        guard !query.isEmpty else { return baseDocuments }
+        return baseDocuments.filter {
             $0.relativePath.localizedCaseInsensitiveContains(query)
+        }
+    }
+
+    @ViewBuilder
+    private func documentContextMenu(_ document: WritingDocument) -> some View {
+        if let family = library.versionFamily(for: document) {
+            Button("View Versions") {
+                selectedDocument = document
+                versionFamilyFilter = family
+            }
+            Button("Review Versioning Documentation") {
+                selectedDocument = document
+                showingVersionDocumentation = true
+            }
+        }
+        Button("Fork This File…") {
+            selectedDocument = document
+            showingCopySheet = true
+        }
+        Button("Make Note") {
+            selectedDocument = document
+            showingNotes = true
+        }
+        Button("File History") {
+            selectedDocument = document
+            showingFileHistory = true
+        }
+        if let family = library.versionFamily(for: document) {
+            Divider()
+            if family.canonicalPath != document.relativePath {
+                Button("Make Canonical") {
+                    selectedDocument = document
+                    try? library.makeCanonical(document)
+                }
+            }
+            Button("Remove Version", role: .destructive) {
+                selectedDocument = document
+                try? library.removeVersion(document)
+                versionFamilyFilter = nil
+            }
+        }
+    }
+
+    private func handleVersioningAction(_ action: VersioningAction) {
+        guard let selectedDocument else { return }
+        switch action {
+        case .selectVersions: showingVersionSelection = true
+        case .viewVersions: versionFamilyFilter = library.versionFamily(for: selectedDocument)
+        case .reviewDocumentation: showingVersionDocumentation = true
+        case .makeCanonical:
+            do { try library.makeCanonical(selectedDocument) }
+            catch { library.errorMessage = error.localizedDescription }
+        case .removeVersion:
+            do {
+                try library.removeVersion(selectedDocument)
+                versionFamilyFilter = nil
+            } catch { library.errorMessage = error.localizedDescription }
         }
     }
 
@@ -198,6 +297,7 @@ struct RepositoryDashboard: View {
 
 private struct DocumentRow: View {
     let document: WritingDocument
+    let isCanonical: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -215,6 +315,8 @@ private struct DocumentRow: View {
             .foregroundStyle(.secondary)
         }
         .padding(.vertical, 3)
+        .padding(.horizontal, 5)
+        .background(isCanonical ? GTTheme.yellow.opacity(0.48) : .clear)
         .foregroundStyle(GTTheme.ink)
     }
 }

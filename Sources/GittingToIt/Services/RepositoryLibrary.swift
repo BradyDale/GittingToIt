@@ -8,6 +8,9 @@ final class RepositoryLibrary: ObservableObject {
     @Published var selectedRepositoryID: UUID?
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var activeDocument: WritingDocument?
+    @Published var requestedVersioningAction: VersioningAction?
+    @Published private(set) var versionFamilies: [VersionFamily] = []
 
     private let git = GitClient()
     private var historyCache: [String: [CommitSummary]] = [:]
@@ -82,12 +85,14 @@ final class RepositoryLibrary: ObservableObject {
 
     func select(_ repository: RepositoryReference) {
         selectedRepositoryID = repository.id
+        versionFamilies = VersioningService().families(repositoryRoot: repository.folderURL)
         if snapshots[repository.id] == nil { refreshSelected() }
     }
 
     func refreshSelected() {
         guard let repository = selectedRepository else { return }
         historyCache = historyCache.filter { !$0.key.hasPrefix(repository.id.uuidString + "\u{0}") }
+        versionFamilies = VersioningService().families(repositoryRoot: repository.folderURL)
         isLoading = true
         errorMessage = nil
         Task {
@@ -162,6 +167,10 @@ final class RepositoryLibrary: ObservableObject {
             purpose: purpose,
             sourceCommit: snapshot.currentCommit
         )
+        _ = try VersioningService().associate(
+            repositoryRoot: repository.folderURL,
+            paths: [document.relativePath, relativePath(of: result.copyURL, in: repository.folderURL)]
+        )
         refreshSelected()
         return result
     }
@@ -185,6 +194,10 @@ final class RepositoryLibrary: ObservableObject {
             contents: data,
             purpose: purpose,
             sourceCommit: commit.shortHash
+        )
+        _ = try VersioningService().associate(
+            repositoryRoot: repository.folderURL,
+            paths: [document.relativePath, relativePath(of: result.copyURL, in: repository.folderURL)]
         )
         refreshSelected()
         return result
@@ -221,6 +234,44 @@ final class RepositoryLibrary: ObservableObject {
             contents: contents
         )
         refreshSelected()
+    }
+
+    func versionFamily(for document: WritingDocument) -> VersionFamily? {
+        versionFamilies.first { $0.members.contains(document.relativePath) }
+    }
+
+    func documents(in family: VersionFamily) -> [WritingDocument] {
+        guard let repository = selectedRepository,
+              let snapshot = snapshots[repository.id] else { return [] }
+        let paths = Set(family.members)
+        return snapshot.documents.filter { paths.contains($0.relativePath) }
+    }
+
+    func associateVersions(_ documents: [WritingDocument]) throws {
+        guard let repository = selectedRepository else { throw VersioningError.selectAtLeastTwo }
+        _ = try VersioningService().associate(
+            repositoryRoot: repository.folderURL,
+            paths: documents.map(\.relativePath)
+        )
+        refreshSelected()
+    }
+
+    func makeCanonical(_ document: WritingDocument) throws {
+        guard let repository = selectedRepository else { throw VersioningError.documentNotVersioned }
+        try VersioningService().makeCanonical(repositoryRoot: repository.folderURL, relativePath: document.relativePath)
+        refreshSelected()
+    }
+
+    func removeVersion(_ document: WritingDocument) throws {
+        guard let repository = selectedRepository else { throw VersioningError.documentNotVersioned }
+        try VersioningService().remove(repositoryRoot: repository.folderURL, relativePath: document.relativePath)
+        refreshSelected()
+    }
+
+    func versionNotes(for document: WritingDocument) throws -> [VersionNoteEntry] {
+        guard let repository = selectedRepository,
+              let family = versionFamily(for: document) else { throw VersioningError.documentNotVersioned }
+        return VersioningService().combinedNotes(repositoryRoot: repository.folderURL, family: family)
     }
 
     func ignoreFile(path: String) async throws -> IgnoreFileResult {
@@ -297,6 +348,11 @@ final class RepositoryLibrary: ObservableObject {
         let directSync = home.appendingPathComponent("Sync", isDirectory: true)
         if FileManager.default.fileExists(atPath: directSync.path) { return directSync }
         return home.appendingPathComponent("Documents", isDirectory: true)
+    }
+
+    private func relativePath(of url: URL, in root: URL) -> String {
+        let prefix = root.standardizedFileURL.path + "/"
+        return url.standardizedFileURL.path.replacingOccurrences(of: prefix, with: "")
     }
 
     private func warmRecentHistories(for repository: RepositoryReference, documents: [WritingDocument]) {

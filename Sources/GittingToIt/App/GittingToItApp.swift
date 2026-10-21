@@ -29,6 +29,19 @@ struct GittingToItApp: App {
                 Button("Add Writing Folder…") { library.addFolder() }
                     .keyboardShortcut("o", modifiers: [.command, .shift])
             }
+            CommandMenu("Versioning") {
+                Button("Select Versions…") { library.requestedVersioningAction = .selectVersions }
+                    .disabled(library.activeDocument == nil)
+                Button("View Versions") { library.requestedVersioningAction = .viewVersions }
+                    .disabled(library.activeDocument.flatMap { library.versionFamily(for: $0) } == nil)
+                Button("Review Versioning Documentation") { library.requestedVersioningAction = .reviewDocumentation }
+                    .disabled(library.activeDocument.flatMap { library.versionFamily(for: $0) } == nil)
+                Divider()
+                Button("Make Canonical") { library.requestedVersioningAction = .makeCanonical }
+                    .disabled(library.activeDocument.flatMap { library.versionFamily(for: $0) } == nil)
+                Button("Remove Version") { library.requestedVersioningAction = .removeVersion }
+                    .disabled(library.activeDocument.flatMap { library.versionFamily(for: $0) } == nil)
+            }
         }
     }
 }
