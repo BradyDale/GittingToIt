@@ -44,6 +44,31 @@ struct CopyService: Sendable {
         guard source.path.hasPrefix(root.path + "/") else { throw RelatedCopyError.sourceOutsideRepository }
         guard FileManager.default.fileExists(atPath: source.path) else { throw RelatedCopyError.sourceMissing }
 
+        return try makeRelatedCopy(
+            repositoryRoot: root,
+            relativePath: relativePath,
+            contents: Data(contentsOf: source),
+            purpose: cleanPurpose,
+            sourceCommit: sourceCommit,
+            now: now
+        )
+    }
+
+    func makeRelatedCopy(
+        repositoryRoot: URL,
+        relativePath: String,
+        contents: Data,
+        purpose: String,
+        sourceCommit: String,
+        now: Date = Date()
+    ) throws -> RelatedCopyResult {
+        let cleanPurpose = purpose.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanPurpose.isEmpty else { throw RelatedCopyError.emptyNote }
+
+        let root = repositoryRoot.standardizedFileURL
+        let source = root.appendingPathComponent(relativePath).standardizedFileURL
+        guard source.path.hasPrefix(root.path + "/") else { throw RelatedCopyError.sourceOutsideRepository }
+
         let copy = availableCopyURL(for: source, now: now)
         let notes = source.deletingLastPathComponent().appendingPathComponent(Self.notesFilename)
         let oldNotes = (try? String(contentsOf: notes, encoding: .utf8)) ?? "# GittingToIt File Notes\n"
@@ -55,9 +80,10 @@ struct CopyService: Sendable {
             now: now
         )
 
-        try FileManager.default.copyItem(at: source, to: copy)
+        try contents.write(to: copy, options: .atomic)
         do {
-            try (oldNotes + entry).write(to: notes, atomically: true, encoding: .utf8)
+            try notesWithNewestEntry(entry, before: oldNotes)
+                .write(to: notes, atomically: true, encoding: .utf8)
         } catch {
             try? FileManager.default.removeItem(at: copy)
             throw error
@@ -135,7 +161,32 @@ struct CopyService: Sendable {
         - Related commit: `\(commit)`
         - Note: \(safeNote)
         """
-        try (oldNotes + entry).write(to: notes, atomically: true, encoding: .utf8)
+        try notesWithNewestEntry(entry, before: oldNotes)
+            .write(to: notes, atomically: true, encoding: .utf8)
+        return notes
+    }
+
+    func editableNotesDraft(
+        repositoryRoot: URL,
+        relativePath: String,
+        now: Date = Date()
+    ) throws -> String {
+        let root = repositoryRoot.standardizedFileURL
+        let file = root.appendingPathComponent(relativePath).standardizedFileURL
+        guard file.path.hasPrefix(root.path + "/") else { throw FileNoteError.fileOutsideRepository }
+
+        let notes = notesURL(repositoryRoot: root, relativePath: relativePath)
+        let oldNotes = (try? String(contentsOf: notes, encoding: .utf8)) ?? "# GittingToIt File Notes\n"
+        let entry = "\n\n## \(Self.diaryDate(now)) — \(file.lastPathComponent)\n\n\n\n"
+        return notesWithNewestEntry(entry, before: oldNotes)
+    }
+
+    func saveNotes(repositoryRoot: URL, relativePath: String, contents: String) throws -> URL {
+        let root = repositoryRoot.standardizedFileURL
+        let file = root.appendingPathComponent(relativePath).standardizedFileURL
+        guard file.path.hasPrefix(root.path + "/") else { throw FileNoteError.fileOutsideRepository }
+        let notes = notesURL(repositoryRoot: root, relativePath: relativePath)
+        try contents.write(to: notes, atomically: true, encoding: .utf8)
         return notes
     }
 
@@ -182,6 +233,17 @@ struct CopyService: Sendable {
         """
     }
 
+    private func notesWithNewestEntry(_ entry: String, before oldNotes: String) -> String {
+        let header = "# GittingToIt File Notes"
+        let body: String
+        if oldNotes.hasPrefix(header) {
+            body = String(oldNotes.dropFirst(header.count)).trimmingCharacters(in: .newlines)
+        } else {
+            body = oldNotes.trimmingCharacters(in: .newlines)
+        }
+        return header + entry + (body.isEmpty ? "\n" : "\n" + body + "\n")
+    }
+
     private static func filenameDate(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -192,6 +254,14 @@ struct CopyService: Sendable {
     private static func noteDate(_ date: Date) -> String {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withColonSeparatorInTimeZone]
+        return formatter.string(from: date)
+    }
+
+    private static func diaryDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = .current
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
         return formatter.string(from: date)
     }
 }

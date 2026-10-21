@@ -18,43 +18,44 @@ struct RepositoryDashboard: View {
     var body: some View {
         HSplitView {
             leftPane
-                .frame(minWidth: 350, idealWidth: 420)
+                .frame(minWidth: 430, idealWidth: 520)
             historyPane
-                .frame(minWidth: 520)
+                .frame(minWidth: 480)
         }
     }
 
     private var leftPane: some View {
         VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 16) {
                 Image(systemName: "bolt.fill")
-                    .font(.system(size: 44, weight: .black))
+                    .font(.system(size: 30, weight: .black))
                     .foregroundStyle(GTTheme.ink.opacity(0.16))
-                Text("CURRENT STATE")
-                    .font(.system(size: 11, weight: .black, design: .monospaced))
-                    .tracking(1.6)
-                Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 7) {
-                    GridRow { Text("Branch").foregroundStyle(.secondary); Text(snapshot.branch) }
-                    GridRow { Text("Commit").foregroundStyle(.secondary); Text(snapshot.currentCommit).monospaced() }
-                    GridRow { Text("Changes").foregroundStyle(.secondary); Text("\(snapshot.changes.count)") }
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("CURRENT STATE")
+                        .font(.system(size: 10, weight: .black, design: .monospaced))
+                        .tracking(1.4)
+                    Text("\(snapshot.branch)  •  \(snapshot.currentCommit)  •  \(snapshot.changes.count) changes")
+                        .font(.callout.monospaced())
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                Spacer()
+                Button("Review & Commit") { showingCommitSheet = true }
+                    .buttonStyle(GTActionButtonStyle(color: GTTheme.blush))
+                    .fixedSize()
+                    .disabled(snapshot.changes.isEmpty)
             }
             .gtPanel(GTTheme.repositoryColor(for: repository.id))
 
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 9) {
-                Button("Review & Commit") { showingCommitSheet = true }
-                    .buttonStyle(GTActionButtonStyle(color: GTTheme.blush))
-                    .disabled(snapshot.changes.isEmpty)
-                Button("Restore") { showingFileHistory = true }
-                    .buttonStyle(GTActionButtonStyle(color: GTTheme.blush))
-                    .disabled(selectedDocument == nil)
-                    .help("Choose a historical version of the selected file.")
+            HStack(alignment: .firstTextBaseline) {
+                Text("FILES")
+                    .font(.system(size: 24, weight: .black, design: .rounded))
+                Spacer()
+                Text("\(snapshot.documents.count) WRITING DOCUMENTS")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .tracking(1.2)
+                    .foregroundStyle(GTTheme.gray)
             }
-
-            Text("WRITING DOCUMENTS")
-                .font(.system(size: 11, weight: .black, design: .monospaced))
-                .tracking(1.6)
 
             TextField("Find a document", text: $documentSearch)
                 .textFieldStyle(.plain)
@@ -67,6 +68,7 @@ struct RepositoryDashboard: View {
                     .tag(document)
             }
             .listStyle(.inset)
+            .frame(minHeight: 320)
 
             HStack {
                 Button("File History") { showingFileHistory = true }
@@ -75,7 +77,7 @@ struct RepositoryDashboard: View {
                 Button("Make Related Copy") { showingCopySheet = true }
                     .buttonStyle(GTActionButtonStyle(color: GTTheme.mint))
                     .disabled(selectedDocument == nil)
-                Button("File Notes") { showingNotes = true }
+                Button("Edit Notes") { showingNotes = true }
                     .buttonStyle(GTActionButtonStyle())
                     .disabled(selectedDocument == nil)
             }

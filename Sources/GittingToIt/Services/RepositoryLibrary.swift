@@ -96,6 +96,7 @@ final class RepositoryLibrary: ObservableObject {
                     try GitClient().snapshot(for: repository)
                 }.value
                 snapshots[repository.id] = snapshot
+                warmRecentHistories(for: repository, documents: snapshot.documents)
             } catch {
                 errorMessage = error.localizedDescription
             }
@@ -165,6 +166,30 @@ final class RepositoryLibrary: ObservableObject {
         return result
     }
 
+    func forkHistoricalVersion(
+        of document: WritingDocument,
+        from commit: CommitSummary,
+        purpose: String
+    ) async throws -> RelatedCopyResult {
+        guard let repository = selectedRepository else { throw RelatedCopyError.sourceMissing }
+        let data = try await Task.detached {
+            try GitClient().fileData(
+                in: repository.folderURL,
+                relativePath: commit.historicalPath ?? document.relativePath,
+                at: commit.hash
+            )
+        }.value
+        let result = try CopyService().makeRelatedCopy(
+            repositoryRoot: repository.folderURL,
+            relativePath: document.relativePath,
+            contents: data,
+            purpose: purpose,
+            sourceCommit: commit.shortHash
+        )
+        refreshSelected()
+        return result
+    }
+
     func addFileNote(to document: WritingDocument, eventType: String, note: String) throws {
         guard let repository = selectedRepository,
               let snapshot = snapshots[repository.id] else {
@@ -176,6 +201,24 @@ final class RepositoryLibrary: ObservableObject {
             eventType: eventType,
             note: note,
             commit: snapshot.currentCommit
+        )
+        refreshSelected()
+    }
+
+    func editableNotesDraft(for document: WritingDocument) throws -> String {
+        guard let repository = selectedRepository else { throw FileNoteError.fileOutsideRepository }
+        return try CopyService().editableNotesDraft(
+            repositoryRoot: repository.folderURL,
+            relativePath: document.relativePath
+        )
+    }
+
+    func saveNotes(for document: WritingDocument, contents: String) throws {
+        guard let repository = selectedRepository else { throw FileNoteError.fileOutsideRepository }
+        _ = try CopyService().saveNotes(
+            repositoryRoot: repository.folderURL,
+            relativePath: document.relativePath,
+            contents: contents
         )
         refreshSelected()
     }
@@ -254,6 +297,32 @@ final class RepositoryLibrary: ObservableObject {
         let directSync = home.appendingPathComponent("Sync", isDirectory: true)
         if FileManager.default.fileExists(atPath: directSync.path) { return directSync }
         return home.appendingPathComponent("Documents", isDirectory: true)
+    }
+
+    private func warmRecentHistories(for repository: RepositoryReference, documents: [WritingDocument]) {
+        let recent = documents.sorted {
+            ($0.modifiedAt ?? .distantPast) > ($1.modifiedAt ?? .distantPast)
+        }.prefix(4)
+        let uncached = recent.filter {
+            historyCache[repository.id.uuidString + "\u{0}" + $0.relativePath] == nil
+        }
+        guard !uncached.isEmpty else { return }
+
+        Task(priority: .utility) {
+            let warmed = await Task.detached(priority: .utility) {
+                uncached.compactMap { document -> (String, [CommitSummary])? in
+                    guard let history = try? GitClient().fileHistory(
+                        in: repository.folderURL,
+                        relativePath: document.relativePath
+                    ) else { return nil }
+                    return (document.relativePath, history)
+                }
+            }.value
+            guard repositories.contains(where: { $0.id == repository.id }) else { return }
+            for (path, history) in warmed {
+                historyCache[repository.id.uuidString + "\u{0}" + path] = history
+            }
+        }
     }
 
     private func catalogURL() -> URL? {

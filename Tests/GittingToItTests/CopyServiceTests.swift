@@ -65,6 +65,54 @@ struct CopyServiceTests {
         }
     }
 
+    @Test func historicalForkCreatesANewFileWithoutChangingCurrentDocument() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let source = root.appendingPathComponent("Chapter.md")
+        try "Current words".write(to: source, atomically: true, encoding: .utf8)
+        let result = try CopyService().makeRelatedCopy(
+            repositoryRoot: root,
+            relativePath: "Chapter.md",
+            contents: Data("Earlier words".utf8),
+            purpose: "Reconsider the quieter opening.",
+            sourceCommit: "abc1234"
+        )
+
+        #expect(try String(contentsOf: source, encoding: .utf8) == "Current words")
+        #expect(try String(contentsOf: result.copyURL, encoding: .utf8) == "Earlier words")
+        #expect(try String(contentsOf: result.notesURL, encoding: .utf8).contains("Reconsider the quieter opening."))
+    }
+
+    @Test func editableNotesDraftStartsWithANewDatedEntryAboveOlderNotes() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try "Words".write(to: root.appendingPathComponent("Draft.md"), atomically: true, encoding: .utf8)
+        let service = CopyService()
+        _ = try service.addFileNote(
+            repositoryRoot: root,
+            relativePath: "Draft.md",
+            eventType: "Note",
+            note: "Older thought",
+            commit: "abc1234",
+            now: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+        let draft = try service.editableNotesDraft(
+            repositoryRoot: root,
+            relativePath: "Draft.md",
+            now: Date(timeIntervalSince1970: 1_800_000_000)
+        )
+
+        #expect(draft.hasPrefix("# GittingToIt File Notes\n\n## "))
+        #expect(draft.contains("Draft.md\n\n\n\n"))
+        #expect(try #require(draft.range(of: "Draft.md")).lowerBound < #require(draft.range(of: "Older thought")).lowerBound)
+    }
+
     @Test func arbitraryFileNoteIsStoredBesideTheDocument() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

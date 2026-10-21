@@ -10,6 +10,7 @@ struct FileHistoryView: View {
     @State private var errorMessage: String?
     @State private var selectedCommitID: CommitSummary.ID?
     @State private var showingRestore = false
+    @State private var showingFork = false
     @State private var detailMode = DetailMode.version
     @State private var detailText = "Select a checkpoint to inspect this file."
     @State private var isLoadingDetail = false
@@ -30,6 +31,9 @@ struct FileHistoryView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
+                Button("Fork This Version") { showingFork = true }
+                    .buttonStyle(GTActionButtonStyle(color: GTTheme.mint))
+                    .disabled(selectedCommitID == nil)
                 Button("Restore Selected Version") { showingRestore = true }
                     .buttonStyle(GTActionButtonStyle(color: GTTheme.blush))
                     .disabled(selectedCommitID == nil)
@@ -103,6 +107,13 @@ struct FileHistoryView: View {
                     .environmentObject(library)
             }
         }
+        .sheet(isPresented: $showingFork) {
+            if let id = selectedCommitID,
+               let commit = commits.first(where: { $0.id == id }) {
+                HistoricalForkSheet(document: document, commit: commit)
+                    .environmentObject(library)
+            }
+        }
     }
 
     private func loadDetail() {
@@ -151,15 +162,10 @@ struct FileNotesView: View {
     @EnvironmentObject private var library: RepositoryLibrary
     let document: WritingDocument
 
-    @State private var eventType = "Note"
-    @State private var newNote = ""
-    @State private var displayedNotes = ""
+    @State private var draftNotes = ""
+    @State private var hasLoadedDraft = false
+    @State private var didSave = false
     @State private var errorMessage: String?
-
-    private let eventTypes = [
-        "Note", "Revised", "Uploaded to Google Docs", "Shared", "Submitted",
-        "Declared canonical", "Reference only", "Abandoned", "Exported"
-    ]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -169,51 +175,49 @@ struct FileNotesView: View {
                 Spacer()
                 Button("Done") { dismiss() }
             }
-            HSplitView {
-                VStack(alignment: .leading, spacing: 9) {
-                    Text("HISTORY").font(.system(size: 10, weight: .black, design: .monospaced)).tracking(1.4)
-                    ScrollView {
-                        Text(displayedNotes)
-                            .font(.body.monospaced())
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .topLeading)
-                    }
-                    .padding(12)
-                    .background(.white)
-                    .overlay(Rectangle().stroke(GTTheme.ink, lineWidth: 1.5))
-                }
+            Text("A dated entry has been placed at the top. Write beneath it; older notes stay below.")
+                .foregroundStyle(.secondary)
 
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("ADD DOCUMENTATION").font(.system(size: 10, weight: .black, design: .monospaced)).tracking(1.4)
-                    Picker("Event", selection: $eventType) {
-                        ForEach(eventTypes, id: \.self) { Text($0).tag($0) }
-                    }
-                    TextEditor(text: $newNote)
-                        .frame(minHeight: 130)
-                        .padding(6)
-                        .background(.white)
-                        .overlay(Rectangle().stroke(GTTheme.ink, lineWidth: 1.5))
-                    if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
-                    Button("Save File Note") {
-                        do {
-                            try library.addFileNote(to: document, eventType: eventType, note: newNote)
-                            newNote = ""
-                            errorMessage = nil
-                            displayedNotes = library.notes(for: document)
-                        } catch {
-                            errorMessage = error.localizedDescription
-                        }
-                    }
+            TextEditor(text: $draftNotes)
+                .font(.body.monospaced())
+                .padding(10)
+                .background(.white)
+                .overlay(Rectangle().stroke(GTTheme.ink, lineWidth: 1.5))
+
+            if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
+            if didSave { Text("Notes saved beside this document.").foregroundStyle(GTTheme.mint) }
+
+            HStack {
+                Text("Saved in GittingToIt Notes.md")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("Save Notes") { saveNotes() }
                     .buttonStyle(GTActionButtonStyle(color: GTTheme.mint))
-                    .disabled(newNote.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    Spacer()
-                }
-                .frame(minWidth: 260)
+                    .disabled(!hasLoadedDraft)
             }
         }
         .padding(20)
         .background(GTTheme.paper)
         .frame(minWidth: 820, minHeight: 520)
-        .onAppear { displayedNotes = library.notes(for: document) }
+        .onAppear {
+            guard !hasLoadedDraft else { return }
+            do {
+                draftNotes = try library.editableNotesDraft(for: document)
+                hasLoadedDraft = true
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func saveNotes() {
+        do {
+            try library.saveNotes(for: document, contents: draftNotes)
+            errorMessage = nil
+            didSave = true
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 }
