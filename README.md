@@ -21,6 +21,30 @@ _The screenshot uses a disposable fictional repository; it contains no personal 
 - **If you want to make a new version** of a file, make the copy from within GittingToIt. This will force you to log why you are making the copy. This is "forking for writers." By logging what you're doing, you will be more likely to be able to know which file to use in the future.
 - If you keep images or other multimedia in the same folders as your writing, select "Ignore" on those files in the dialogue when making a commit (unless you modify these files a lot, you'll just be burning Git repository storage by tracking them).
 
+## Versioning: forking for writers
+
+Writers often make copies when they want to explore a different direction without disturbing the current draft. That works well in the moment, but it can become difficult to remember which copy came first, why it was created, and which version should now be treated as the master.
+
+GittingToIt organizes related drafts into **version sets**.
+
+From the **Versioning** menu, you can:
+
+- **Select Versions** to designate multiple existing files as versions of the same piece of writing.
+- **View Versions** to temporarily filter the file list to that version set.
+- **Review Versioning Documentation** to read the notes from every version as one continuous, chronological record.
+- **Make Canonical** to identify the file currently considered the master copy. Canonical files are highlighted in the file list.
+- **Remove Version** to remove a file from its version set without deleting the file.
+
+When you fork a document through GittingToIt, the new copy is automatically associated with its source document. The copy uses the filename convention `filename c YYYYMMDD.ext`, preserving the date on which that version was created.
+
+GittingToIt requires a note when a fork is created. That note becomes part of the versioning documentation, alongside later diary entries and revision notes. This creates a record not only of what changed, but why another version exists.
+
+GittingToIt never stores user data itself. The version relationships and canonical status are stored in a small, human-readable file inside the folder where the user keeps their writing. GittingToIt users always retain 100% control of all the writing they create—including their notes about that writing. The relationships file appears in the folder at:
+
+`.gittingtoit/version-families.json`
+
+This file contains relative filenames and version-family information. It does not contain the writing itself. Because it lives with the writing repository, Git can preserve the version relationships alongside the documents.
+
 ## Current checkpoint
 
 The native macOS prototype includes:
