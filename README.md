@@ -32,6 +32,7 @@ From the **Versioning** menu, you can:
 - **Select Versions** to designate multiple existing files as versions of the same piece of writing.
 - **View Versions** to temporarily filter the file list to that version set.
 - **Review Versioning Documentation** to read the notes from every version as one continuous, chronological record.
+- **Compare Versions** to read two Markdown or plain-text drafts in a single writer-friendly view, switch between the earlier and later text, and move through additions and deletions.
 - **Make Canonical** to identify the file currently considered the master copy. Canonical files are highlighted in the file list.
 - **Remove Version** to remove a file from its version set without deleting the file.
 
@@ -63,6 +64,7 @@ The native macOS prototype includes:
 - A dated, editable notes diary stored in human-readable `GittingToIt Notes.md`
 - Documented related copies named `filename c YYYYMMDD.ext`
 - Version sets that keep related drafts together, identify the canonical copy, and combine their notes into one timeline
+- Single-view comparison of related Markdown and plain-text versions, with marked-up, earlier, and later reading modes
 - Documented forks made from any historical version without replacing the current file
 - Required purpose notes for copies
 - Automatic family-history notes whenever a known original or copy is checkpointed

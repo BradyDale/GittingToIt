@@ -274,6 +274,23 @@ final class RepositoryLibrary: ObservableObject {
         return VersioningService().combinedNotes(repositoryRoot: repository.folderURL, family: family)
     }
 
+    func compareVersions(earlier: WritingDocument, later: WritingDocument) async throws -> VersionComparison {
+        guard let repository = selectedRepository else { throw VersioningError.documentNotVersioned }
+        return try await Task.detached {
+            let root = repository.folderURL
+            let earlierURL = root.appendingPathComponent(earlier.relativePath)
+            let laterURL = root.appendingPathComponent(later.relativePath)
+            let earlierText = try String(contentsOf: earlierURL, encoding: .utf8)
+            let laterText = try String(contentsOf: laterURL, encoding: .utf8)
+            let markedUp = try GitClient().wordDiffBetweenWorkingFiles(
+                in: root,
+                earlierPath: earlier.relativePath,
+                laterPath: later.relativePath
+            )
+            return VersionComparison(earlierText: earlierText, laterText: laterText, markedUpText: markedUp)
+        }.value
+    }
+
     func ignoreFile(path: String) async throws -> IgnoreFileResult {
         guard let repository = selectedRepository else { throw GitClientError.noFilesSelected }
         let result = try await Task.detached {

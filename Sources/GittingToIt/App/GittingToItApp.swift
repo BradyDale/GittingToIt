@@ -36,6 +36,8 @@ struct GittingToItApp: App {
                     .disabled(library.activeDocument.flatMap { library.versionFamily(for: $0) } == nil)
                 Button("Review Versioning Documentation") { library.requestedVersioningAction = .reviewDocumentation }
                     .disabled(library.activeDocument.flatMap { library.versionFamily(for: $0) } == nil)
+                Button("Compare Versions…") { library.requestedVersioningAction = .compareVersions }
+                    .disabled(library.activeDocument.flatMap { library.versionFamily(for: $0) } == nil)
                 Divider()
                 Button("Make Canonical") { library.requestedVersioningAction = .makeCanonical }
                     .disabled(library.activeDocument.flatMap { library.versionFamily(for: $0) } == nil)

@@ -92,8 +92,15 @@ enum VersioningAction: String, Identifiable, Sendable {
     case selectVersions
     case viewVersions
     case reviewDocumentation
+    case compareVersions
     case makeCanonical
     case removeVersion
 
     var id: String { rawValue }
+}
+
+struct VersionComparison: Sendable {
+    let earlierText: String
+    let laterText: String
+    let markedUpText: String
 }

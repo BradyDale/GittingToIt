@@ -14,6 +14,7 @@ struct RepositoryDashboard: View {
     @State private var showingNotes = false
     @State private var showingVersionSelection = false
     @State private var showingVersionDocumentation = false
+    @State private var showingVersionComparison = false
     @State private var versionFamilyFilter: VersionFamily?
     @State private var documentSearch = ""
     @State private var historySearch = ""
@@ -134,6 +135,12 @@ struct RepositoryDashboard: View {
                     .environmentObject(library)
             }
         }
+        .sheet(isPresented: $showingVersionComparison) {
+            if let selectedDocument, let family = library.versionFamily(for: selectedDocument) {
+                CompareVersionsView(family: family, startingDocument: selectedDocument)
+                    .environmentObject(library)
+            }
+        }
         .onChange(of: selectedDocument) { _, document in library.activeDocument = document }
         .onChange(of: library.requestedVersioningAction) { _, action in
             guard let action else { return }
@@ -235,6 +242,10 @@ struct RepositoryDashboard: View {
                 selectedDocument = document
                 showingVersionDocumentation = true
             }
+            Button("Compare Versions…") {
+                selectedDocument = document
+                showingVersionComparison = true
+            }
         }
         Button("Fork This File…") {
             selectedDocument = document
@@ -270,6 +281,7 @@ struct RepositoryDashboard: View {
         case .selectVersions: showingVersionSelection = true
         case .viewVersions: versionFamilyFilter = library.versionFamily(for: selectedDocument)
         case .reviewDocumentation: showingVersionDocumentation = true
+        case .compareVersions: showingVersionComparison = true
         case .makeCanonical:
             do { try library.makeCanonical(selectedDocument) }
             catch { library.errorMessage = error.localizedDescription }

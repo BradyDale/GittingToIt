@@ -169,6 +169,37 @@ struct GitClient: Sendable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    func wordDiffBetweenWorkingFiles(in root: URL, earlierPath: String, laterPath: String) throws -> String {
+        let arguments = [
+            "-C", root.path, "diff", "--no-index", "--word-diff=plain", "--no-color", "--",
+            root.appendingPathComponent(earlierPath).path,
+            root.appendingPathComponent(laterPath).path
+        ]
+        let result = try execute(arguments)
+        guard result.status == 0 || result.status == 1 else {
+            throw GitClientError.commandFailed(
+                arguments: arguments,
+                message: String(decoding: result.error, as: UTF8.self)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            )
+        }
+        return cleanedWordDiff(String(decoding: result.output, as: UTF8.self))
+    }
+
+    private func cleanedWordDiff(_ raw: String) -> String {
+        raw.split(separator: "\n", omittingEmptySubsequences: false)
+            .map(String.init)
+            .filter { line in
+                !line.hasPrefix("diff --git ") &&
+                !line.hasPrefix("index ") &&
+                !line.hasPrefix("--- ") &&
+                !line.hasPrefix("+++ ") &&
+                !line.hasPrefix("@@ ")
+            }
+            .joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     func fileData(in root: URL, relativePath: String, at commit: String) throws -> Data {
         let arguments = ["-C", root.path, "show", "\(commit):./\(relativePath)"]
         let result = try execute(arguments)
