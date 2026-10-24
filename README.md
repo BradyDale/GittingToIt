@@ -57,6 +57,7 @@ The native macOS prototype includes:
 - Branch, current commit, and working-change summaries
 - Commit history with hashes, dates, times, messages, and changed files
 - Fast document and commit-history filtering
+- Directory-grouped file browsing with persistent folder headings
 - Writing-document discovery for Markdown, text, RTF, Word, and PDF files
 - Creation, modification, and last-committed dates
 - Per-file Git history
@@ -71,6 +72,7 @@ The native macOS prototype includes:
 - Automatic family-history notes whenever a known original or copy is checkpointed
 - A bold, high-contrast visual system
 - Selective checkpoints that cannot include unrelated staged work
+- Editable checkpoint messages prefilled with created, changed, deleted, and forked file summaries
 - Per-file and grouped ignore controls, including convenient rules for Finder metadata and image-heavy folders
 - Safe one-file restoration with an automatic safety checkpoint for current edits
 

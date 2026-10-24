@@ -3,6 +3,21 @@ import Testing
 @testable import GittingToIt
 
 struct CopyServiceTests {
+    @Test func checkpointMessageSummarizesCreatedChangedDeletedAndForkedFiles() {
+        let message = CheckpointMessageBuilder.summary(for: [
+            GitChange(status: "??", path: "Drafts/New.md"),
+            GitChange(status: "M", path: "Drafts/Current.md"),
+            GitChange(status: "D", path: "Drafts/Old.md"),
+            GitChange(status: "??", path: "Drafts/Chapter c 20261023.md")
+        ])
+
+        #expect(message.contains("CREATED: Drafts/New.md"))
+        #expect(message.contains("CHANGED: Drafts/Current.md"))
+        #expect(message.contains("DELETED: Drafts/Old.md"))
+        #expect(message.contains("FORKED: Drafts/Chapter.md with Drafts/Chapter c 20261023.md"))
+        #expect(!message.contains("CREATED: Drafts/Chapter c 20261023.md"))
+    }
+
     @Test func extractsReadableTextFromRTFAndHTML() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

@@ -12,7 +12,7 @@ struct ReviewCommitSheet: View {
     let changes: [GitChange]
 
     @State private var selectedPaths: Set<String>
-    @State private var message = ""
+    @State private var message: String
     @State private var isSaving = false
     @State private var ignoredPaths: Set<String> = []
     @State private var stopTrackingPaths: Set<String> = []
@@ -23,6 +23,7 @@ struct ReviewCommitSheet: View {
     init(changes: [GitChange]) {
         self.changes = changes
         _selectedPaths = State(initialValue: Set(changes.map(\.path)))
+        _message = State(initialValue: CheckpointMessageBuilder.summary(for: changes))
     }
 
     var body: some View {

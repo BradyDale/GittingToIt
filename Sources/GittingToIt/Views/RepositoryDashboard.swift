@@ -77,13 +77,23 @@ struct RepositoryDashboard: View {
                 .background(.white)
                 .overlay(Rectangle().stroke(GTTheme.ink, lineWidth: 1.5))
 
-            List(filteredDocuments, selection: $selectedDocument) { document in
-                DocumentRow(
-                    document: document,
-                    isCanonical: library.versionFamily(for: document)?.canonicalPath == document.relativePath
-                )
-                    .tag(document)
-                    .contextMenu { documentContextMenu(document) }
+            List(selection: $selectedDocument) {
+                ForEach(directoryGroups) { group in
+                    Section {
+                        ForEach(group.documents) { document in
+                            DocumentRow(
+                                document: document,
+                                isCanonical: library.versionFamily(for: document)?.canonicalPath == document.relativePath
+                            )
+                            .tag(document)
+                            .contextMenu { documentContextMenu(document) }
+                        }
+                    } header: {
+                        Label(group.directory, systemImage: "folder.fill")
+                            .font(.system(.caption, design: .monospaced).weight(.black))
+                            .foregroundStyle(GTTheme.ink)
+                    }
+                }
             }
             .listStyle(.inset)
             .frame(minHeight: 320)
@@ -231,6 +241,15 @@ struct RepositoryDashboard: View {
         }
     }
 
+    private var directoryGroups: [DocumentDirectoryGroup] {
+        Dictionary(grouping: filteredDocuments) { document in
+            let directory = (document.relativePath as NSString).deletingLastPathComponent
+            return directory.isEmpty ? "Repository Root" : directory
+        }
+        .map { DocumentDirectoryGroup(directory: $0.key, documents: $0.value.sorted { $0.name < $1.name }) }
+        .sorted { $0.directory.localizedStandardCompare($1.directory) == .orderedAscending }
+    }
+
     @ViewBuilder
     private func documentContextMenu(_ document: WritingDocument) -> some View {
         if let family = library.versionFamily(for: document) {
@@ -305,6 +324,12 @@ struct RepositoryDashboard: View {
                 date.localizedCaseInsensitiveContains(query)
         }
     }
+}
+
+private struct DocumentDirectoryGroup: Identifiable {
+    let directory: String
+    let documents: [WritingDocument]
+    var id: String { directory }
 }
 
 private struct DocumentRow: View {
