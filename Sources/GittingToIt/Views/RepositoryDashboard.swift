@@ -96,7 +96,7 @@ struct RepositoryDashboard: View {
                 }
             }
             .listStyle(.inset)
-            .frame(minHeight: 320)
+            .frame(minHeight: 180)
 
             HStack {
                 Button("File History") { showingFileHistory = true }

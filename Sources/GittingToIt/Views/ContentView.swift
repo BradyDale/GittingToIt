@@ -5,13 +5,12 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
-            repositoryTabs
-            Rectangle().fill(GTTheme.ink).frame(height: 2)
+            topNavigation
 
             if let repository = library.selectedRepository,
                let snapshot = library.snapshots[repository.id] {
                 RepositoryDashboard(repository: repository, snapshot: snapshot)
+                    .clipped()
             } else if library.isLoading {
                 ProgressView("Reading writing history…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -29,6 +28,17 @@ struct ContentView: View {
         } message: {
             Text(library.errorMessage ?? "Unknown problem")
         }
+    }
+
+    private var topNavigation: some View {
+        VStack(spacing: 0) {
+            header
+            repositoryTabs
+            Rectangle().fill(GTTheme.ink).frame(height: 2)
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .background(GTTheme.paper)
+        .zIndex(10)
     }
 
     private var header: some View {
@@ -54,53 +64,63 @@ struct ContentView: View {
     }
 
     private var repositoryTabs: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(library.repositories) { repository in
-                    let selected = library.selectedRepositoryID == repository.id
-                    Button {
-                        library.select(repository)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text(repository.displayName)
-                                .font(.system(.headline, design: .rounded).weight(.black))
-                            Text(selected ? "OPEN" : "REPOSITORY")
-                                .font(.system(size: 9, weight: .bold, design: .monospaced))
-                                .tracking(1.3)
-                        }
-                        .foregroundStyle(GTTheme.ink)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 11)
-                        .frame(minWidth: 130, alignment: .leading)
-                        .background(selected ? GTTheme.repositoryColor(for: repository.id) : GTTheme.paper)
-                        .overlay(Rectangle().stroke(GTTheme.ink, lineWidth: 1.5))
-                    }
-                    .buttonStyle(.plain)
-                    .contextMenu {
-                        Button("Remove from GittingToIt", role: .destructive) {
-                            library.removeFromLibrary(repository)
-                        }
-                    }
-                }
+        ViewThatFits(in: .horizontal) {
+            repositoryButtons
+                .fixedSize(horizontal: true, vertical: false)
 
-                Button {
-                    library.addFolder()
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.title2.weight(.black))
-                        .foregroundStyle(GTTheme.ink)
-                        .frame(width: 46, height: 46)
-                        .background(GTTheme.yellow)
-                        .overlay(Rectangle().stroke(GTTheme.ink, lineWidth: 1.5))
-                        .accessibilityLabel("Add writing folder")
-                }
-                .buttonStyle(.plain)
+            ScrollView(.horizontal, showsIndicators: true) {
+                repositoryButtons
             }
-            .padding(.horizontal, 18)
-            .padding(.bottom, 14)
         }
         .frame(minHeight: 76, idealHeight: 76, maxHeight: 76)
+        .fixedSize(horizontal: false, vertical: true)
         .layoutPriority(2)
+    }
+
+    private var repositoryButtons: some View {
+        HStack(spacing: 8) {
+            ForEach(library.repositories) { repository in
+                let selected = library.selectedRepositoryID == repository.id
+                Button {
+                    library.select(repository)
+                } label: {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(repository.displayName)
+                            .font(.system(.headline, design: .rounded).weight(.black))
+                        Text(selected ? "OPEN" : "REPOSITORY")
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .tracking(1.3)
+                    }
+                    .foregroundStyle(GTTheme.ink)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 11)
+                    .frame(minWidth: 130, alignment: .leading)
+                    .background(selected ? GTTheme.repositoryColor(for: repository.id) : GTTheme.paper)
+                    .overlay(Rectangle().stroke(GTTheme.ink, lineWidth: 1.5))
+                }
+                .buttonStyle(.plain)
+                .contextMenu {
+                    Button("Remove from GittingToIt", role: .destructive) {
+                        library.removeFromLibrary(repository)
+                    }
+                }
+            }
+
+            Button {
+                library.addFolder()
+            } label: {
+                Image(systemName: "plus")
+                    .font(.title2.weight(.black))
+                    .foregroundStyle(GTTheme.ink)
+                    .frame(width: 46, height: 46)
+                    .background(GTTheme.yellow)
+                    .overlay(Rectangle().stroke(GTTheme.ink, lineWidth: 1.5))
+                    .accessibilityLabel("Add writing folder")
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 18)
+        .padding(.bottom, 14)
     }
 
     private var emptyState: some View {
