@@ -49,6 +49,8 @@ struct ContentView: View {
         .padding(.horizontal, 18)
         .padding(.vertical, 14)
         .foregroundStyle(GTTheme.ink)
+        .fixedSize(horizontal: false, vertical: true)
+        .layoutPriority(3)
     }
 
     private var repositoryTabs: some View {
@@ -97,6 +99,8 @@ struct ContentView: View {
             .padding(.horizontal, 18)
             .padding(.bottom, 14)
         }
+        .frame(minHeight: 76, idealHeight: 76, maxHeight: 76)
+        .layoutPriority(2)
     }
 
     private var emptyState: some View {
