@@ -12,7 +12,7 @@ struct RepositoryReference: Codable, Hashable, Identifiable, Sendable {
     }
 }
 
-struct GitChange: Hashable, Identifiable, Sendable {
+struct GitChange: Codable, Hashable, Identifiable, Sendable {
     let status: String
     let path: String
     var id: String { status + "\u{0}" + path }
@@ -24,7 +24,7 @@ struct IgnoreFileResult: Sendable {
     let wasTracked: Bool
 }
 
-struct CommitSummary: Hashable, Identifiable, Sendable {
+struct CommitSummary: Codable, Hashable, Identifiable, Sendable {
     let hash: String
     let shortHash: String
     let date: Date?
@@ -50,8 +50,8 @@ struct CommitSummary: Hashable, Identifiable, Sendable {
     }
 }
 
-struct WritingDocument: Hashable, Identifiable, Sendable {
-    enum DateSource: String, Sendable {
+struct WritingDocument: Codable, Hashable, Identifiable, Sendable {
+    enum DateSource: String, Codable, Sendable {
         case gitHistory = "Git history"
         case fileSystem = "File system"
         case unavailable = "Unknown"
@@ -68,12 +68,18 @@ struct WritingDocument: Hashable, Identifiable, Sendable {
     var fileExtension: String { URL(fileURLWithPath: relativePath).pathExtension.lowercased() }
 }
 
-struct RepositorySnapshot: Sendable {
+struct RepositorySnapshot: Codable, Sendable {
     let branch: String
     let currentCommit: String
     let changes: [GitChange]
     let commits: [CommitSummary]
     let documents: [WritingDocument]
+}
+
+struct RepositoryStatus: Sendable {
+    let branch: String
+    let currentCommit: String
+    let changes: [GitChange]
 }
 
 struct RelatedCopyResult: Sendable {

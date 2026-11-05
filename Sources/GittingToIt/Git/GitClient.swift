@@ -61,28 +61,50 @@ struct GitClient: Sendable {
     }
 
     func snapshot(for repository: RepositoryReference) throws -> RepositorySnapshot {
-        let root = try repositoryRoot(for: repository.folderURL)
-        guard root == repository.folderURL.standardizedFileURL else {
-            throw GitClientError.notARepository(repository.folderURL)
-        }
-
-        let branch = (try? run(["-C", root.path, "symbolic-ref", "--short", "HEAD"])) ?? "Detached"
-        let currentCommit = (try? run(["-C", root.path, "rev-parse", "--short", "HEAD"])) ?? "No commits yet"
+        let status = try status(for: repository, includeAllUntracked: true)
+        let root = repository.folderURL.standardizedFileURL
+        let loadedCommits = try commits(in: root)
 
         return RepositorySnapshot(
-            branch: branch,
-            currentCommit: currentCommit,
-            changes: try changes(in: root),
-            commits: try commits(in: root),
+            branch: status.branch,
+            currentCommit: loadedCommits.first?.shortHash ?? "No commits yet",
+            changes: status.changes,
+            commits: loadedCommits,
             documents: try documents(in: root)
         )
     }
 
-    func changes(in root: URL) throws -> [GitChange] {
+    func status(for repository: RepositoryReference, includeAllUntracked: Bool = false) throws -> RepositoryStatus {
+        let root = repository.folderURL.standardizedFileURL
+
         let output = try run([
-            "-C", root.path, "status", "--porcelain=v1", "-z", "--untracked-files=all"
-        ], trimOutput: false)
+            "status", "--porcelain=v1", "--branch", "-z",
+            includeAllUntracked ? "--untracked-files=all" : "--untracked-files=normal"
+        ], trimOutput: false, environment: repositoryEnvironment(for: root))
+        var records = output.split(separator: "\0", omittingEmptySubsequences: true).map(String.init)
+        let branchRecord = records.isEmpty ? "" : records.removeFirst()
+        let branch = branchRecord
+            .replacingOccurrences(of: "## ", with: "")
+            .replacingOccurrences(of: "No commits yet on ", with: "")
+            .components(separatedBy: "...").first ?? "Detached"
+
+        return RepositoryStatus(
+            branch: branch,
+            currentCommit: "",
+            changes: parseChanges(records)
+        )
+    }
+
+    func changes(in root: URL, includeAllUntracked: Bool = true) throws -> [GitChange] {
+        let output = try run([
+            "status", "--porcelain=v1", "-z",
+            includeAllUntracked ? "--untracked-files=all" : "--untracked-files=normal"
+        ], trimOutput: false, environment: repositoryEnvironment(for: root))
         let records = output.split(separator: "\0", omittingEmptySubsequences: true).map(String.init)
+        return parseChanges(records)
+    }
+
+    private func parseChanges(_ records: [String]) -> [GitChange] {
         var result: [GitChange] = []
         var index = 0
         while index < records.count {
@@ -95,6 +117,18 @@ struct GitClient: Sendable {
             index += (rawStatus.contains("R") || rawStatus.contains("C")) ? 2 : 1
         }
         return result
+    }
+
+    /// Keep status checks out of cloud-backed working folders. On macOS, Git's `-C`
+    /// changes its process directory to the repository before it starts working; a file
+    /// provider can then make even `getcwd()` block. These variables point Git at the
+    /// same repository while its process remains in `/private/tmp`.
+    private func repositoryEnvironment(for root: URL) -> [String: String] {
+        [
+            "GIT_DIR": root.appendingPathComponent(".git", isDirectory: true).path,
+            "GIT_WORK_TREE": root.path,
+            "GIT_OPTIONAL_LOCKS": "0"
+        ]
     }
 
     func commits(in root: URL, limit: Int = 250) throws -> [CommitSummary] {
@@ -411,7 +445,7 @@ struct GitClient: Sendable {
         ])) != nil
     }
 
-    private func documents(in root: URL) throws -> [WritingDocument] {
+    func documents(in root: URL) throws -> [WritingDocument] {
         let output = try run([
             "-C", root.path, "ls-files", "--cached", "--others", "--exclude-standard", "-z"
         ], trimOutput: false)
@@ -535,6 +569,11 @@ struct GitClient: Sendable {
         let errorHandle = try FileHandle(forWritingTo: errorURL)
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        process.currentDirectoryURL = URL(fileURLWithPath: "/private/tmp", isDirectory: true)
+        // A status check is brief and user-visible. Without an explicit interactive QoS,
+        // macOS can heavily throttle the child process while it opens metadata inside a
+        // cloud-backed folder, even though the same Git command is instant in Terminal.
+        process.qualityOfService = .userInitiated
         process.arguments = arguments
         process.environment = ProcessInfo.processInfo.environment.merging(environment) { _, override in override }
         process.standardOutput = outputHandle

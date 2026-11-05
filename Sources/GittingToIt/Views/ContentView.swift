@@ -1,3 +1,5 @@
+import AppKit
+import Combine
 import SwiftUI
 
 struct ContentView: View {
@@ -28,6 +30,16 @@ struct ContentView: View {
         } message: {
             Text(library.errorMessage ?? "Unknown problem")
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            library.refreshStatus()
+        }
+        .task(id: library.selectedRepositoryID) {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(15))
+                guard !Task.isCancelled else { break }
+                library.refreshStatus()
+            }
+        }
     }
 
     private var topNavigation: some View {
@@ -48,13 +60,13 @@ struct ContentView: View {
                 .tracking(-1)
             Spacer()
             Button {
-                library.refreshSelected()
+                library.refreshStatus()
             } label: {
-                Label("Refresh", systemImage: "arrow.clockwise")
+                Label(library.isRefreshingStatus ? "Checking…" : "Refresh", systemImage: "arrow.clockwise")
             }
             .buttonStyle(GTActionButtonStyle())
             .fixedSize()
-            .disabled(library.selectedRepository == nil || library.isLoading)
+            .disabled(library.selectedRepository == nil || library.isLoading || library.isRefreshingStatus)
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 14)

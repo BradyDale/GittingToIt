@@ -7,6 +7,7 @@ final class RepositoryLibrary: ObservableObject {
     @Published private(set) var snapshots: [UUID: RepositorySnapshot] = [:]
     @Published var selectedRepositoryID: UUID?
     @Published var isLoading = false
+    @Published private(set) var isRefreshingStatus = false
     @Published var errorMessage: String?
     @Published var activeDocument: WritingDocument?
     @Published var requestedVersioningAction: VersioningAction?
@@ -17,6 +18,7 @@ final class RepositoryLibrary: ObservableObject {
 
     init() {
         loadCatalog()
+        loadSnapshotCache()
         selectedRepositoryID = repositories.first?.id
         refreshSelected()
     }
@@ -85,28 +87,100 @@ final class RepositoryLibrary: ObservableObject {
 
     func select(_ repository: RepositoryReference) {
         selectedRepositoryID = repository.id
-        versionFamilies = VersioningService().families(repositoryRoot: repository.folderURL)
+        refreshVersionFamilies(for: repository)
         if snapshots[repository.id] == nil { refreshSelected() }
     }
 
     func refreshSelected() {
         guard let repository = selectedRepository else { return }
         historyCache = historyCache.filter { !$0.key.hasPrefix(repository.id.uuidString + "\u{0}") }
-        versionFamilies = VersioningService().families(repositoryRoot: repository.folderURL)
-        isLoading = true
+        isLoading = snapshots[repository.id] == nil
         errorMessage = nil
         Task {
             do {
-                let snapshot = try await Task.detached {
-                    try GitClient().snapshot(for: repository)
+                let status = try await Task.detached {
+                    try GitClient().status(for: repository)
                 }.value
+                guard repositories.contains(where: { $0.id == repository.id }) else { return }
+                let previous = snapshots[repository.id]
+                snapshots[repository.id] = RepositorySnapshot(
+                    branch: status.branch,
+                    currentCommit: previous?.currentCommit ?? "Loading…",
+                    changes: status.changes,
+                    commits: previous?.commits ?? [],
+                    documents: previous?.documents ?? []
+                )
+                saveSnapshotCache()
+                isLoading = false
+                refreshVersionFamilies(for: repository)
+
+                let commitsTask = Task.detached(priority: .utility) {
+                    try GitClient().commits(in: repository.folderURL)
+                }
+                let documentsTask = Task.detached(priority: .utility) {
+                    try GitClient().documents(in: repository.folderURL)
+                }
+                let loadedCommits = try await commitsTask.value
+                let loadedDocuments = try await documentsTask.value
+                guard repositories.contains(where: { $0.id == repository.id }) else { return }
+                let latest = snapshots[repository.id]
+                let snapshot = RepositorySnapshot(
+                    branch: latest?.branch ?? status.branch,
+                    currentCommit: loadedCommits.first?.shortHash ?? latest?.currentCommit ?? "No commits yet",
+                    changes: latest?.changes ?? status.changes,
+                    commits: loadedCommits,
+                    documents: loadedDocuments
+                )
                 snapshots[repository.id] = snapshot
+                saveSnapshotCache()
                 warmRecentHistories(for: repository, documents: snapshot.documents)
             } catch {
                 errorMessage = error.localizedDescription
             }
             isLoading = false
         }
+    }
+
+    private func refreshVersionFamilies(for repository: RepositoryReference) {
+        Task {
+            let families = await Task.detached(priority: .utility) {
+                VersioningService().families(repositoryRoot: repository.folderURL)
+            }.value
+            guard selectedRepositoryID == repository.id else { return }
+            versionFamilies = families
+        }
+    }
+
+    func refreshStatus() {
+        guard !isLoading, !isRefreshingStatus else { return }
+        isRefreshingStatus = true
+        Task {
+            defer { isRefreshingStatus = false }
+            do {
+                _ = try await refreshStatusNow()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    @discardableResult
+    func refreshStatusNow(includeAllUntracked: Bool = false) async throws -> [GitChange] {
+        guard let repository = selectedRepository else { return [] }
+        let status = try await Task.detached {
+            try GitClient().status(for: repository, includeAllUntracked: includeAllUntracked)
+        }.value
+        guard repositories.contains(where: { $0.id == repository.id }) else { return [] }
+        let previous = snapshots[repository.id]
+        snapshots[repository.id] = RepositorySnapshot(
+            branch: status.branch,
+            currentCommit: previous?.currentCommit ?? "Loading…",
+            changes: status.changes,
+            commits: previous?.commits ?? [],
+            documents: previous?.documents ?? []
+        )
+        saveSnapshotCache()
+        return status.changes
     }
 
     func history(for document: WritingDocument) async throws -> [CommitSummary] {
@@ -400,6 +474,29 @@ final class RepositoryLibrary: ObservableObject {
         }
         return support.appendingPathComponent("GittingToIt", isDirectory: true)
             .appendingPathComponent("repositories.json")
+    }
+
+    private func snapshotCacheURL() -> URL? {
+        catalogURL()?.deletingLastPathComponent().appendingPathComponent("snapshot-cache.json")
+    }
+
+    private func loadSnapshotCache() {
+        guard let url = snapshotCacheURL(),
+              let data = try? Data(contentsOf: url),
+              let decoded = try? JSONDecoder().decode([UUID: RepositorySnapshot].self, from: data) else { return }
+        let repositoryIDs = Set(repositories.map(\.id))
+        snapshots = decoded.filter { repositoryIDs.contains($0.key) }
+    }
+
+    private func saveSnapshotCache() {
+        guard let url = snapshotCacheURL() else { return }
+        do {
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            let data = try JSONEncoder().encode(snapshots)
+            try data.write(to: url, options: .atomic)
+        } catch {
+            // The cache is an acceleration only; repository work must continue if it cannot be saved.
+        }
     }
 
     private func loadCatalog() {

@@ -10,6 +10,8 @@ struct RepositoryDashboard: View {
     @State private var commitFiles: [GitChange] = []
     @State private var showingCopySheet = false
     @State private var showingCommitSheet = false
+    @State private var isPreparingCommit = false
+    @State private var reviewChanges: [GitChange] = []
     @State private var showingFileHistory = false
     @State private var showingNotes = false
     @State private var showingVersionSelection = false
@@ -44,10 +46,12 @@ struct RepositoryDashboard: View {
                         .minimumScaleFactor(0.8)
                 }
                 Spacer()
-                Button("Review & Commit") { showingCommitSheet = true }
+                Button(isPreparingCommit ? "Checking…" : "Review & Commit") {
+                    prepareCommitReview()
+                }
                     .buttonStyle(GTActionButtonStyle(color: GTTheme.blush))
                     .fixedSize()
-                    .disabled(snapshot.changes.isEmpty)
+                    .disabled(isPreparingCommit)
             }
             .gtPanel(GTTheme.repositoryColor(for: repository.id))
 
@@ -118,7 +122,7 @@ struct RepositoryDashboard: View {
             }
         }
         .sheet(isPresented: $showingCommitSheet) {
-            ReviewCommitSheet(changes: snapshot.changes)
+            ReviewCommitSheet(changes: reviewChanges)
                 .environmentObject(library)
         }
         .sheet(isPresented: $showingCopySheet) {
@@ -156,6 +160,19 @@ struct RepositoryDashboard: View {
             guard let action else { return }
             handleVersioningAction(action)
             library.requestedVersioningAction = nil
+        }
+    }
+
+    private func prepareCommitReview() {
+        isPreparingCommit = true
+        Task {
+            do {
+                reviewChanges = try await library.refreshStatusNow(includeAllUntracked: true)
+                showingCommitSheet = true
+            } catch {
+                library.errorMessage = error.localizedDescription
+            }
+            isPreparingCommit = false
         }
     }
 
