@@ -66,6 +66,12 @@ struct WritingDocument: Codable, Hashable, Identifiable, Sendable {
     var id: String { relativePath }
     var name: String { URL(fileURLWithPath: relativePath).lastPathComponent }
     var fileExtension: String { URL(fileURLWithPath: relativePath).pathExtension.lowercased() }
+    var recencyDate: Date { modifiedAt ?? createdAt ?? .distantPast }
+
+    static func recentlyUpdatedFirst(_ lhs: WritingDocument, _ rhs: WritingDocument) -> Bool {
+        if lhs.recencyDate != rhs.recencyDate { return lhs.recencyDate > rhs.recencyDate }
+        return lhs.relativePath.localizedStandardCompare(rhs.relativePath) == .orderedAscending
+    }
 }
 
 struct RepositorySnapshot: Codable, Sendable {

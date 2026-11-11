@@ -57,7 +57,8 @@ The native macOS prototype includes:
 - Branch, current commit, and working-change summaries
 - Commit history with hashes, dates, times, messages, and changed files
 - Fast document and commit-history filtering
-- Directory-grouped file browsing with persistent folder headings
+- Recently edited files and folders first, with persistent directory headings
+- One-click repository browsing in Finder and per-file “Show in Finder” actions
 - Writing-document discovery for Markdown, text, RTF, Word, and PDF files
 - Creation, modification, and last-committed dates
 - Per-file Git history

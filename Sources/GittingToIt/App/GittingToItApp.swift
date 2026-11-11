@@ -28,6 +28,10 @@ struct GittingToItApp: App {
             CommandGroup(after: .newItem) {
                 Button("Add Writing Folder…") { library.addFolder() }
                     .keyboardShortcut("o", modifiers: [.command, .shift])
+                Button("Browse Current Repository in Finder") {
+                    library.browseSelectedRepositoryInFinder()
+                }
+                .disabled(library.selectedRepository == nil)
             }
             CommandMenu("Versioning") {
                 Button("Select Versions…") { library.requestedVersioningAction = .selectVersions }

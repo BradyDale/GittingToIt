@@ -3,6 +3,25 @@ import Testing
 @testable import GittingToIt
 
 struct CopyServiceTests {
+    @Test func writingDocumentsSortByMostRecentEdit() {
+        let older = WritingDocument(
+            relativePath: "Novel/Older.md",
+            createdAt: Date(timeIntervalSince1970: 100),
+            modifiedAt: Date(timeIntervalSince1970: 200),
+            lastCommittedAt: nil,
+            creationSource: .fileSystem
+        )
+        let newer = WritingDocument(
+            relativePath: "Novel/Newer.md",
+            createdAt: Date(timeIntervalSince1970: 50),
+            modifiedAt: Date(timeIntervalSince1970: 300),
+            lastCommittedAt: nil,
+            creationSource: .fileSystem
+        )
+
+        #expect([older, newer].sorted(by: WritingDocument.recentlyUpdatedFirst) == [newer, older])
+    }
+
     @Test func checkpointMessageSummarizesCreatedChangedDeletedAndForkedFiles() {
         let message = CheckpointMessageBuilder.summary(for: [
             GitChange(status: "??", path: "Drafts/New.md"),

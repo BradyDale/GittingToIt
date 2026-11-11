@@ -27,6 +27,17 @@ final class RepositoryLibrary: ObservableObject {
         repositories.first { $0.id == selectedRepositoryID }
     }
 
+    func browseSelectedRepositoryInFinder() {
+        guard let repository = selectedRepository else { return }
+        NSWorkspace.shared.open(repository.folderURL)
+    }
+
+    func revealInFinder(_ document: WritingDocument) {
+        guard let repository = selectedRepository else { return }
+        let fileURL = repository.folderURL.appendingPathComponent(document.relativePath)
+        NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+    }
+
     func addFolder() {
         let panel = NSOpenPanel()
         panel.title = "Add a writing folder"

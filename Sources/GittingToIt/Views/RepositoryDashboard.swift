@@ -59,6 +59,11 @@ struct RepositoryDashboard: View {
                 Text(versionFamilyFilter == nil ? "FILES" : "VERSIONS")
                     .font(.system(size: 24, weight: .black, design: .rounded))
                 Spacer()
+                Button("Browse in Finder") {
+                    library.browseSelectedRepositoryInFinder()
+                }
+                .buttonStyle(.borderless)
+                .font(.caption.weight(.semibold))
                 Text("\(snapshot.documents.count) WRITING DOCUMENTS")
                     .font(.system(size: 10, weight: .bold, design: .monospaced))
                     .tracking(1.2)
@@ -263,8 +268,18 @@ struct RepositoryDashboard: View {
             let directory = (document.relativePath as NSString).deletingLastPathComponent
             return directory.isEmpty ? "Repository Root" : directory
         }
-        .map { DocumentDirectoryGroup(directory: $0.key, documents: $0.value.sorted { $0.name < $1.name }) }
-        .sorted { $0.directory.localizedStandardCompare($1.directory) == .orderedAscending }
+        .map {
+            DocumentDirectoryGroup(
+                directory: $0.key,
+                documents: $0.value.sorted(by: WritingDocument.recentlyUpdatedFirst)
+            )
+        }
+        .sorted { lhs, rhs in
+            if lhs.mostRecentEdit != rhs.mostRecentEdit {
+                return lhs.mostRecentEdit > rhs.mostRecentEdit
+            }
+            return lhs.directory.localizedStandardCompare(rhs.directory) == .orderedAscending
+        }
     }
 
     @ViewBuilder
@@ -294,6 +309,10 @@ struct RepositoryDashboard: View {
         Button("File History") {
             selectedDocument = document
             showingFileHistory = true
+        }
+        Divider()
+        Button("Show in Finder") {
+            library.revealInFinder(document)
         }
         if let family = library.versionFamily(for: document) {
             Divider()
@@ -347,6 +366,7 @@ private struct DocumentDirectoryGroup: Identifiable {
     let directory: String
     let documents: [WritingDocument]
     var id: String { directory }
+    var mostRecentEdit: Date { documents.first?.recencyDate ?? .distantPast }
 }
 
 private struct DocumentRow: View {
